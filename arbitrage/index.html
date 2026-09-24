@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARBX Arbitrage Terminal</title>
+<meta name="description" content="Real-time sportsbook arbitrage, middle and +EV scanner with a stake optimizer.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#06080c; --bg2:#0a0e14; --panel:#0d1219; --panel2:#111823; --line:#1a2331; --line2:#243044;
+  --text:#e6edf3; --muted:#7d8a9a; --dim:#4a5566;
+  --green:#19e68c; --green2:#0fb872; --red:#ff4d6d; --amber:#ffb020; --cyan:#3dd6f5; --violet:#9b7bff;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;overflow-x:hidden}
+body{background:radial-gradient(1200px 600px at 80% -10%,rgba(25,230,140,.07),transparent 60%),radial-gradient(900px 500px at -10% 110%,rgba(155,123,255,.06),transparent 60%),var(--bg);min-height:100vh}
+a{color:var(--cyan)}
+button,input,select{font:inherit;color:inherit}
+.mono{font-family:var(--mono)}
+.muted{color:var(--muted)} .pos{color:var(--green)} .neg{color:var(--red)} .amb{color:var(--amber)}
+
+/* top bar */
+.top{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:12px;padding:10px 20px;background:rgba(6,8,12,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.brand{font-family:var(--mono);font-weight:700;font-size:18px;letter-spacing:1px;display:flex;align-items:center;gap:10px;white-space:nowrap}
+.brand b{color:var(--green)} .brand small{font-weight:400;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
+.pulse{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(25,230,140,.7);animation:pulse 1.6s infinite}
+.pulse.off{background:var(--dim);animation:none}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(25,230,140,.6)}70%{box-shadow:0 0 0 12px rgba(25,230,140,0)}100%{box-shadow:0 0 0 0 rgba(25,230,140,0)}}
+.tabs{display:flex;gap:2px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.tabs button{background:none;border:0;padding:6px 12px;border-radius:7px;cursor:pointer;color:var(--muted);font-weight:500}
+.tabs button.on{background:var(--panel2);color:var(--text);box-shadow:inset 0 0 0 1px var(--line2)}
+.ctl{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.seg{display:flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
+.seg button{background:none;border:0;padding:6px 11px;cursor:pointer;color:var(--muted);font-family:var(--mono);font-size:12px}
+.seg button.on{background:var(--green);color:#03140b;font-weight:700}
+.field{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:0 8px}
+.field span{color:var(--muted);font-size:11px;font-family:var(--mono)}
+.field input,.field select{background:none;border:0;outline:0;padding:6px 0;width:90px;font-family:var(--mono)}
+.field select{width:auto}
+.btn{background:var(--panel2);border:1px solid var(--line2);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--green);color:var(--green)}
+.btn.pri{background:var(--green);color:#03140b;border-color:var(--green);font-weight:700}
+.btn.pri:hover{filter:brightness(1.1);color:#03140b}
+.btn.sm{padding:4px 9px;font-size:12px}
+.status{font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
+
+main{padding:16px 20px 40px;max-width:1680px;margin:0 auto}
+.view{display:none} .view.on{display:block}
+
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(7,minmax(0,1fr)) minmax(0,1.6fr);gap:10px;margin-bottom:14px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;position:relative;overflow:hidden}
+.kpi .l{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.kpi .v{font-family:var(--mono);font-size:22px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:11px;color:var(--dim);font-family:var(--mono)}
+.kpi.hot{border-color:rgba(25,230,140,.45);box-shadow:0 0 24px -8px rgba(25,230,140,.5)}
+.kpi canvas{width:100%;height:46px;display:block;margin-top:2px}
+
+.grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:14px;margin-bottom:14px}
+.grid3{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,.8fr) minmax(0,1fr);gap:14px;margin-bottom:14px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
+.panel h3{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);font-weight:500;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.subtabs{display:flex;gap:6px}
+.subtabs button{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;color:var(--muted);font-weight:500}
+.subtabs button.on{color:var(--text);border-color:var(--green);box-shadow:0 0 16px -6px var(--green)}
+.subtabs .n{font-family:var(--mono);font-size:11px;margin-left:6px;padding:1px 6px;border-radius:6px;background:var(--line)}
+.subtabs button.on .n{background:var(--green);color:#03140b}
+.filters{display:flex;gap:6px;flex-wrap:wrap}
+.filters .field input{width:60px}
+.filters .field.q input{width:120px}
+
+.tablewrap{overflow:auto;max-height:560px;border-radius:10px;border:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{position:sticky;top:0;background:var(--panel2);text-align:left;font-weight:500;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;z-index:1}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+tbody tr{cursor:pointer;transition:background .15s}
+tbody tr:hover{background:rgba(255,255,255,.025)}
+tbody tr.sel{background:rgba(25,230,140,.07);box-shadow:inset 3px 0 0 var(--green)}
+tbody tr.fresh{animation:fresh 2.4s ease-out}
+@keyframes fresh{0%{background:rgba(25,230,140,.35)}100%{background:transparent}}
+.roi{font-family:var(--mono);font-weight:700;font-size:15px;color:var(--green);font-variant-numeric:tabular-nums}
+.roi.big{text-shadow:0 0 12px rgba(25,230,140,.7)}
+.ev .t{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.ev .m{font-size:11px;color:var(--muted);font-family:var(--mono)}
+.tag{display:inline-block;font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:5px;background:var(--line);color:var(--cyan);margin-right:6px;letter-spacing:.5px}
+.tag.live{background:rgba(255,77,109,.15);color:var(--red)}
+.legs{display:flex;gap:4px;flex-wrap:wrap}
+.chip{font-family:var(--mono);font-size:11px;padding:3px 7px;border-radius:6px;background:var(--bg2);border:1px solid var(--line2);white-space:nowrap}
+.chip b{color:var(--text)} .chip i{font-style:normal;color:var(--muted)}
+.age{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.empty{padding:40px 20px;text-align:center;color:var(--muted)}
+.empty .big{font-size:36px;margin-bottom:8px;opacity:.5}
+
+/* detail */
+.detail{position:sticky;top:70px;align-self:start;max-height:calc(100vh - 86px);overflow:auto}
+.dh{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
+.dh .t{font-size:17px;font-weight:700;line-height:1.25}
+.dh .m{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px}
+.badge{font-family:var(--mono);font-size:11px;font-weight:700;padding:4px 8px;border-radius:7px;background:rgba(25,230,140,.12);color:var(--green);border:1px solid rgba(25,230,140,.35);white-space:nowrap}
+.badge.dead{background:rgba(255,77,109,.12);color:var(--red);border-color:rgba(255,77,109,.35)}
+.badge.v{background:rgba(155,123,255,.12);color:var(--violet);border-color:rgba(155,123,255,.35)}
+.gapwrap{margin:6px 0 14px}
+.gap{position:relative;height:30px;border-radius:8px;background:var(--bg2);border:1px solid var(--line);display:flex;overflow:visible}
+.gap .seg{height:100%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;color:#03140b;font-weight:700;overflow:hidden;white-space:nowrap;transition:width .4s}
+.gap .seg:first-child{border-radius:7px 0 0 7px}
+.gap .edge{height:100%;background:repeating-linear-gradient(45deg,rgba(25,230,140,.25) 0 6px,rgba(25,230,140,.08) 6px 12px);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;color:var(--green);font-weight:700;border-radius:0 7px 7px 0;animation:glow 1.8s infinite alternate;transition:width .4s;overflow:hidden;white-space:nowrap}
+@keyframes glow{from{box-shadow:inset 0 0 0 1px rgba(25,230,140,.2)}to{box-shadow:inset 0 0 0 1px rgba(25,230,140,.8),0 0 18px -4px rgba(25,230,140,.6)}}
+.gap .mark{position:absolute;top:-6px;bottom:-6px;width:2px;background:var(--text);opacity:.8}
+.gap .mark:after{content:'100%';position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:9px;color:var(--muted)}
+.gapcap{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:6px}
+.sp-ctl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:10px}
+.sp-ctl .field input,.sp-ctl .field select{width:100%}
+.bias{display:flex;align-items:center;gap:8px;grid-column:1/-1}
+.bias input[type=range]{flex:1;accent-color:var(--violet)}
+.legtbl td{padding:7px 6px}
+.legtbl input{width:88px;background:var(--bg2);border:1px solid var(--line2);border-radius:6px;padding:5px 7px;font-family:var(--mono);outline:0}
+.legtbl input:focus{border-color:var(--green)}
+.book{font-weight:700;font-size:12px}
+.sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0}
+.sum>div{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.sum .l{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.sum .v{font-family:var(--mono);font-weight:700;font-size:16px;margin-top:2px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.ladder{margin-top:14px}
+.ladder h4{font-size:11px;color:var(--muted);font-weight:500;margin:10px 0 6px;font-family:var(--mono)}
+.lad{display:grid;grid-template-columns:110px 1fr 64px;gap:6px;align-items:center;font-family:var(--mono);font-size:11px;margin-bottom:3px}
+.lad .bar{height:12px;border-radius:3px;background:var(--line2);position:relative}
+.lad .bar i{position:absolute;inset:0 auto 0 0;border-radius:3px;background:linear-gradient(90deg,var(--line2),var(--cyan))}
+.lad.best .bar i{background:linear-gradient(90deg,var(--green2),var(--green));box-shadow:0 0 10px -2px var(--green)}
+.lad.best{color:var(--green)}
+.lad .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.info{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}
+.info>div{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.info .l{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.info .v{font-family:var(--mono);font-weight:700;font-size:15px;margin-top:2px}
+.window{position:relative;height:56px;margin:18px 4px 8px}
+.window .axis{position:absolute;left:0;right:0;top:27px;height:2px;background:var(--line2)}
+.window .over,.window .under{position:absolute;height:12px;border-radius:3px}
+.window .over{top:10px;background:rgba(61,214,245,.35);border:1px solid var(--cyan)}
+.window .under{top:34px;background:rgba(255,176,32,.3);border:1px solid var(--amber)}
+.window .zone{position:absolute;top:0;bottom:0;background:rgba(25,230,140,.18);border-left:1px dashed var(--green);border-right:1px dashed var(--green)}
+.window .tk{position:absolute;top:48px;transform:translateX(-50%);font-family:var(--mono);font-size:9px;color:var(--muted)}
+
+/* heat */
+#heat{display:grid;grid-template-columns:repeat(auto-fill,minmax(11px,1fr));gap:2px}
+#heat div{aspect-ratio:1;border-radius:2px;cursor:pointer;transition:transform .15s}
+#heat div:hover{transform:scale(1.8);position:relative;z-index:2;outline:1px solid var(--text)}
+.legend{display:flex;align-items:center;gap:8px;margin-top:10px;font-family:var(--mono);font-size:10px;color:var(--muted)}
+.legend .ramp{flex:1;height:6px;border-radius:3px;background:linear-gradient(90deg,#19e68c,#0e6b4a 30%,#10404a 45%,#152233 70%,#0c1119)}
+.bk{display:grid;grid-template-columns:100px 1fr 34px;gap:8px;align-items:center;font-size:12px;margin-bottom:6px}
+.bk .bar{height:10px;background:var(--bg2);border-radius:3px;overflow:hidden}
+.bk .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--violet),var(--cyan));border-radius:3px;transition:width .4s}
+.bk .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tape{font-family:var(--mono);font-size:11px;max-height:260px;overflow:hidden;mask-image:linear-gradient(#000 70%,transparent)}
+#tape div{display:grid;grid-template-columns:52px 1fr auto;gap:8px;padding:3px 0;border-bottom:1px dashed var(--line);animation:slide .35s ease-out}
+@keyframes slide{from{opacity:0;transform:translateY(-6px)}to{opacity:1}}
+#tape .x{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grave{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px}
+.grave>div{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px}
+.grave .x{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* forms */
+.formgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.fg{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.fg label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.fg input,.fg select,.fg textarea{background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:8px 10px;font-family:var(--mono);outline:0;color:var(--text)}
+.fg input:focus{border-color:var(--green)}
+.fg .hint{font-size:11px;color:var(--dim)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{background:var(--bg2);border:1px solid var(--line2);border-radius:20px;padding:4px 10px;font-family:var(--mono);font-size:11px;cursor:pointer;color:var(--muted)}
+.chips button.on{border-color:var(--green);color:var(--green);background:rgba(25,230,140,.08)}
+.calc-leg{display:grid;grid-template-columns:1.2fr 1fr .7fr 34px;gap:8px;margin-bottom:8px}
+.calc-leg input{background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:8px 10px;font-family:var(--mono);outline:0;width:100%}
+.conv{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px}
+.conv>div{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.conv .l{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
+.conv .v{font-family:var(--mono);font-weight:700;font-size:16px}
+canvas#equity{width:100%;height:220px;display:block}
+.guide{max-width:880px;line-height:1.65;color:#c4ccd6}
+.guide h2{color:var(--text);font-size:22px;margin:22px 0 8px}
+.guide h2:first-child{margin-top:0}
+.guide code,.guide .f{font-family:var(--mono);background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:1px 6px;color:var(--green);font-size:12.5px}
+.guide .f{display:block;padding:10px 14px;margin:8px 0}
+.guide ul{padding-left:20px} .guide li{margin:4px 0}
+.warn{border:1px solid rgba(255,176,32,.35);background:rgba(255,176,32,.06);border-radius:12px;padding:12px 14px;color:#e8d3a8;margin:14px 0}
+#toast{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:100}
+#toast div{background:var(--panel2);border:1px solid var(--green);border-radius:10px;padding:10px 14px;font-size:13px;box-shadow:0 10px 30px -10px rgba(25,230,140,.5);animation:slide .3s;max-width:340px}
+#toast div.err{border-color:var(--red);box-shadow:0 10px 30px -10px rgba(255,77,109,.5)}
+
+@media (max-width:1280px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}.kpis .flow{grid-column:1/-1}.grid3{grid-template-columns:1fr 1fr}.grid3>:last-child{grid-column:1/-1}}
+@media (max-width:980px){.grid{grid-template-columns:1fr}.detail{position:static;max-height:none}.formgrid{grid-template-columns:1fr}}
+@media (max-width:640px){
+  main{padding:12px 16px 30px}.top{padding:10px 16px;gap:10px}.ctl{margin-left:0;width:100%}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3{grid-template-columns:1fr}
+  .conv{grid-template-columns:repeat(2,minmax(0,1fr))}.sum{grid-template-columns:1fr 1fr}
+  .tabs{width:100%;overflow-x:auto}.brand small{display:none}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand"><span class="pulse" id="pulse"></span>ARB<b>//</b>X <small>arbitrage terminal</small></div>
+  <nav class="tabs" id="tabs">
+    <button data-v="scanner" class="on">Scanner</button>
+    <button data-v="calc">Calculator</button>
+    <button data-v="ledger">Ledger</button>
+    <button data-v="settings">Settings</button>
+    <button data-v="guide">Guide</button>
+  </nav>
+  <div class="ctl">
+    <div class="seg" id="modeSeg"><button data-m="demo" class="on">DEMO</button><button data-m="live">LIVE</button></div>
+    <label class="field"><span>BANKROLL $</span><input id="bankroll" type="number" min="1" step="50" style="width:70px"></label>
+    <div class="seg" id="fmtSeg"><button data-f="american">US</button><button data-f="decimal">DEC</button></div>
+    <button class="btn" id="pauseBtn">Pause</button>
+    <button class="btn pri" id="scanBtn">Scan now</button>
+    <div class="status" id="status">idle</div>
+  </div>
+</header>
+
+<main>
+<!-- SCANNER -->
+<section class="view on" id="v-scanner">
+  <div class="kpis">
+    <div class="kpi" id="k-arbs"><div class="l">Live arbs</div><div class="v">0</div><div class="s">&nbsp;</div></div>
+    <div class="kpi"><div class="l">Best ROI</div><div class="v pos" id="k-best">—</div><div class="s" id="k-best-s">&nbsp;</div></div>
+    <div class="kpi"><div class="l">Profit on table</div><div class="v" id="k-table">$0</div><div class="s">at your bankroll / arb</div></div>
+    <div class="kpi"><div class="l">Middles</div><div class="v" id="k-mid">0</div><div class="s">+EV windows</div></div>
+    <div class="kpi"><div class="l">+EV bets</div><div class="v" id="k-ev">0</div><div class="s" id="k-ev-s">vs sharp line</div></div>
+    <div class="kpi"><div class="l">Markets</div><div class="v" id="k-mk">0</div><div class="s" id="k-mk-s">0 books</div></div>
+    <div class="kpi"><div class="l">Avg arb life</div><div class="v" id="k-life">—</div><div class="s" id="k-life-s">0 closed</div></div>
+    <div class="kpi flow"><div class="l">Arb flow · live count per scan</div><canvas id="flow"></canvas></div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="ph">
+        <div class="subtabs" id="subtabs">
+          <button data-t="arb" class="on">Arbs<span class="n" id="n-arb">0</span></button>
+          <button data-t="mid">Middles<span class="n" id="n-mid">0</span></button>
+          <button data-t="ev">+EV<span class="n" id="n-ev">0</span></button>
+        </div>
+        <div class="filters">
+          <label class="field"><span>MIN %</span><input id="minRoi" type="number" step="0.1" value="0"></label>
+          <label class="field"><span>SPORT</span><select id="sportF"><option value="">All</option></select></label>
+          <label class="field q"><span>⌕</span><input id="q" placeholder="team / book"></label>
+        </div>
+      </div>
+      <div class="tablewrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+    </div>
+    <aside class="panel detail" id="detail">
+      <div class="empty"><div class="big">◎</div>Select an opportunity to open the stake optimizer.</div>
+    </aside>
+  </div>
+
+  <div class="grid3">
+    <div class="panel"><h3>Market pulse <span class="mono" id="heatN" style="letter-spacing:0">0 markets</span></h3><div id="heat"></div>
+      <div class="legend"><span>arb</span><div class="ramp"></div><span>high vig</span></div></div>
+    <div class="panel"><h3>Book edge leaderboard</h3><div id="books"></div></div>
+    <div class="panel"><h3>Line tape <span class="mono" id="tapeN" style="letter-spacing:0"></span></h3><div id="tape"></div></div>
+  </div>
+
+  <div class="panel"><h3>Graveyard · closed arbs <span class="muted mono" style="letter-spacing:0">windows close fast; this is how fast</span></h3><div class="grave" id="grave"><div class="muted">No closed arbs yet.</div></div></div>
+</section>
+
+<!-- CALCULATOR -->
+<section class="view" id="v-calc">
+  <div class="grid">
+    <div class="panel">
+      <h3>Manual arbitrage calculator <span class="row"><button class="btn sm" id="c2">2-way</button><button class="btn sm" id="c3">3-way</button><button class="btn sm" id="cAdd">+ leg</button></span></h3>
+      <div class="calc-leg muted mono" style="font-size:10px;letter-spacing:1.5px"><span>OUTCOME / BOOK</span><span>ODDS (+150, 2.5, 3/2)</span><span>COMM %</span><span></span></div>
+      <div id="calcLegs"></div>
+      <h3 style="margin-top:20px">Odds converter</h3>
+      <div class="fg"><input id="convIn" placeholder="Type any odds: -110, +245, 1.91, 7/4" value="+150"></div>
+      <div class="conv" id="convOut"></div>
+      <h3 style="margin-top:20px">No-vig fair line</h3>
+      <div class="fg"><input id="nvIn" placeholder="Odds for every outcome, comma separated: -110, -110" value="-120, +105"><div class="hint">Removes the bookmaker margin to reveal true implied probability.</div></div>
+      <div class="conv" id="nvOut"></div>
+    </div>
+    <aside class="panel detail" id="calcPanel"></aside>
+  </div>
+</section>
+
+<!-- LEDGER -->
+<section class="view" id="v-ledger">
+  <div class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+    <div class="kpi"><div class="l">Realized P&amp;L</div><div class="v" id="l-real">$0</div></div>
+    <div class="kpi"><div class="l">Open exposure</div><div class="v" id="l-open">$0</div></div>
+    <div class="kpi"><div class="l">Locked (open)</div><div class="v pos" id="l-lock">$0</div></div>
+    <div class="kpi"><div class="l">Bets logged</div><div class="v" id="l-n">0</div></div>
+  </div>
+  <div class="panel" style="margin-bottom:14px"><h3>Equity curve <span class="row"><button class="btn sm" id="csvBtn">Export CSV</button><button class="btn sm" id="clrBtn">Clear</button></span></h3><canvas id="equity"></canvas></div>
+  <div class="panel"><div class="tablewrap" style="max-height:none"><table><thead><tr><th>Logged</th><th>Event</th><th>Legs</th><th>Staked</th><th>Locked</th><th>Result</th><th>P&amp;L</th></tr></thead><tbody id="ledgerBody"></tbody></table></div></div>
+</section>
+
+<!-- SETTINGS -->
+<section class="view" id="v-settings">
+  <div class="formgrid">
+    <div class="panel">
+      <h3>Live odds feed · The Odds API</h3>
+      <div class="fg"><label>API key</label><input id="s-key" type="password" placeholder="paste key from the-odds-api.com" autocomplete="off"><div class="hint">Stored only in this browser (localStorage). Free tier: 500 credits/month.</div></div>
+      <div class="fg"><label>Regions</label><div class="chips" id="s-regions"></div></div>
+      <div class="fg"><label>Markets</label><div class="chips" id="s-markets"></div></div>
+      <div class="fg"><label>Sports <button class="btn sm" id="loadSports" style="margin-left:8px">Load in-season sports</button></label><div class="chips" id="s-sports"></div><div class="hint" id="costHint"></div></div>
+      <div class="fg"><label>Auto refresh (seconds)</label><input id="s-refresh" type="number" min="15" step="5"></div>
+      <div class="fg"><label><input type="checkbox" id="s-prematch"> Pre-match only (skip in-play events)</label></div>
+    </div>
+    <div class="panel">
+      <h3>Engine</h3>
+      <div class="fg"><label>Sharp reference book (for +EV)</label><input id="s-sharp"><div class="hint">Book key used as the "true" price after removing vig. Falls back to a de-vigged market consensus.</div></div>
+      <div class="fg"><label>Minimum +EV edge %</label><input id="s-evmin" type="number" step="0.1"></div>
+      <div class="fg"><label>Alert when a new arb ≥ ROI %</label><input id="s-alert" type="number" step="0.1"></div>
+      <div class="fg"><label><input type="checkbox" id="s-sound"> Sound + desktop notification on alert</label></div>
+      <div class="fg"><label>Default rounding</label><select id="s-round"><option value="0.01">Cents</option><option value="1">$1</option><option value="5">$5</option><option value="10">$10</option></select><div class="hint">Round stakes so they don't look like arb bets. The optimizer picks the rounding combo with the best worst-case ROI.</div></div>
+      <div class="fg"><label>Exchange commission (book_key=%)</label><input id="s-comm"><div class="hint">Applied to net winnings, e.g. betfair_ex_uk=5, smarkets=2</div></div>
+      <div class="fg"><label>Excluded books (keys, comma separated)</label><input id="s-excl"><div class="hint" id="booksSeen"></div></div>
+      <button class="btn pri" id="saveBtn">Save settings</button>
+    </div>
+  </div>
+</section>
+
+<!-- GUIDE -->
+<section class="view" id="v-guide">
+  <div class="panel guide">
+    <h2>How an arb exists</h2>
+    <p>Each price implies a probability: <code>p = 1 / decimal_odds</code>. A single book's prices always sum to more than 100%; the extra is its margin. If you take the <b>best</b> price for each outcome from <b>different</b> books and the sum drops below 100%, one set of stakes pays out more than it costs, whatever the result.</p>
+    <span class="f">S = Σ 1/oᵢ   →   arb if S &lt; 1   →   ROI = 1/S − 1<br>stakeᵢ = T · (1/oᵢ) / S   →   every outcome returns T / S</span>
+    <p>The ARBX engine runs this on every market it sees: moneylines (2- and 3-way), each spread point and each total point. Exchange commission is taken off net winnings first: <code>o' = 1 + (o − 1)(1 − c)</code>.</p>
+    <h2>Middles</h2>
+    <p>When books hang different lines, e.g. <b>Over 44.5</b> at one book and <b>Under 46.5</b> at another, both bets win if the final lands inside the window. ARBX estimates the chance of landing there from each sport's scoring spread and shows the expected value along with the worst case.</p>
+    <h2>+EV (positive expected value)</h2>
+    <p>A sharp book's prices, with the vig removed, are the closest thing to true probability. When a soft book pays more than that fair price, the bet has an edge. ARBX shows full, ½ and ¼ Kelly stakes: <code>f* = (b·p − q) / b</code>.</p>
+    <h2>Stake optimizer</h2>
+    <ul>
+      <li><b>Equal payout:</b> the same profit on every outcome.</li>
+      <li><b>Bias slider:</b> moves profit onto one outcome while the others break even, so you ride the side you like and risk nothing.</li>
+      <li><b>Anchor a leg:</b> type a stake into any leg (e.g. the book's max bet) and the other legs are sized to match it.</li>
+      <li><b>Rounding:</b> searches every floor/ceil combination for the best guaranteed ROI with round-number stakes.</li>
+    </ul>
+    <h2>Workflow that actually banks</h2>
+    <ul>
+      <li>Place the <b>harder</b> leg first: the soft book with the stale line, or the one most likely to limit you. Then hedge right away.</li>
+      <li>Check the line on the book's site before you commit. Feeds lag by seconds, and the Graveyard shows how fast windows close.</li>
+      <li>Watch the rules: void and settlement rules differ (overtime, retirements, 3-way vs 2-way). A mismatch can turn an arb into exposure.</li>
+      <li>Log every bet in the Ledger and settle it, so your realized ROI is measured instead of guessed.</li>
+    </ul>
+    <div class="warn"><b>Reality check.</b> Arbitrage is mathematically risk-free but not operationally risk-free. Books cancel "palpable error" bets, cap stakes, and limit accounts that only take stale lines. Only bet where it's legal and you meet the age requirement. DEMO mode data is simulated. Gamble responsibly: 1-800-GAMBLER.</div>
+  </div>
+</section>
+</main>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ============================ utilities ============================ */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sum = a => a.reduce((x, y) => x + y, 0);
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+const erf = x => { const t = 1 / (1 + .3275911 * Math.abs(x)); const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - .284496736) * t + .254829592) * t * Math.exp(-x * x); return x >= 0 ? y : -y; };
+const Phi = z => .5 * (1 + erf(z / Math.SQRT2));
+const PhiInv = p => { let lo = -8, hi = 8; for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; Phi(m) < p ? lo = m : hi = m; } return (lo + hi) / 2; };
+const money = (x, d = 2) => (x < 0 ? '-$' : '$') + Math.abs(x).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (x, d = 2) => (x * 100).toFixed(d) + '%';
+const fmtPt = p => (p > 0 ? '+' : '') + p;
+const decToAm = d => d >= 2 ? Math.round((d - 1) * 100) : Math.round(-100 / (d - 1));
+const amToDec = a => a > 0 ? 1 + a / 100 : 1 + 100 / -a;
+const fmtOdds = d => { if (!isFinite(d)) return '—'; if (S.format === 'decimal') return d.toFixed(2); const a = decToAm(d); return (a > 0 ? '+' : '') + a; };
+function parseOdds(str) {
+  const s = String(str).trim(); if (!s) return NaN;
+  if (s.includes('/')) { const [a, b] = s.split('/').map(Number); return b ? 1 + a / b : NaN; }
+  const n = Number(s); if (!isFinite(n)) return NaN;
+  if (/^[+-]/.test(s) || Math.abs(n) >= 100) return Math.abs(n) >= 100 ? amToDec(n) : NaN;
+  return n > 1 ? n : NaN;
+}
+function toFrac(d) {
+  const x = d - 1; let best = [Math.round(x), 1], err = Infinity;
+  for (let den = 1; den <= 100; den++) { const num = Math.round(x * den); const e = Math.abs(num / den - x); if (e < err - 1e-9) { err = e; best = [num, den]; } if (e < 1e-6) break; }
+  return best[0] + '/' + best[1];
+}
+const ago = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + String(s % 60).padStart(2, '0') + 's'; };
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+function toast(msg, err) { const d = document.createElement('div'); if (err) d.className = 'err'; d.innerHTML = msg; $('#toast').prepend(d); setTimeout(() => d.remove(), 4200); }
+
+/* ============================ settings ============================ */
+const DEFAULTS = {
+  mode: 'demo', bankroll: 1000, format: 'american', apiKey: '', regions: ['us', 'us2'], markets: ['h2h', 'spreads', 'totals'],
+  sports: ['upcoming'], refreshSec: 90, prematch: true, sharp: 'pinnacle', evMin: 2, alertRoi: 1, sound: true, rounding: 1,
+  commission: { betfair_ex_uk: .05, betfair_ex_eu: .05, betfair_ex_au: .05, matchbook: .02, smarkets: .02 }, excluded: []
+};
+const S = Object.assign({}, DEFAULTS, store.get('arbx.settings', {}));
+const saveS = () => store.set('arbx.settings', S);
+
+/* sport scoring spread → used for middle hit probability */
+const SD = [
+  ['americanfootball_nfl', 13.5, 13.5], ['americanfootball_ncaaf', 16, 16], ['basketball_nba', 12, 18], ['basketball_wnba', 11, 15],
+  ['basketball_ncaab', 11, 16], ['baseball', 4.3, 4.3], ['icehockey', 2.4, 2.2], ['soccer', 1.8, 1.6]
+];
+const sdFor = (key, market) => { const r = SD.find(([k]) => key.startsWith(k)); return r ? (market === 'spreads' ? r[1] : r[2]) : 14; };
+
+/* ============================ demo engine ============================ */
+const Demo = (() => {
+  const BOOKS = [
+    ['draftkings', 'DraftKings', .045, 1], ['fanduel', 'FanDuel', .045, 1], ['betmgm', 'BetMGM', .052, 1.1], ['williamhill_us', 'Caesars', .05, 1.1],
+    ['espnbet', 'ESPN BET', .05, 1.2], ['fanatics', 'Fanatics', .05, 1.3], ['betrivers', 'BetRivers', .055, 1.2], ['hardrockbet', 'Hard Rock Bet', .05, 1.3],
+    ['bovada', 'Bovada', .05, 1.2], ['betonlineag', 'BetOnline.ag', .035, 1], ['bet365', 'bet365', .042, 1], ['pinnacle', 'Pinnacle', .022, .35],
+    ['betfair_ex_uk', 'Betfair Exchange', .006, .7], ['unibet_eu', 'Unibet', .048, 1.1]
+  ];
+  const SPORTS = [
+    { key: 'americanfootball_nfl', title: 'NFL', n: 7, sp: true, step: .5, sd: 13.5, tsd: 13.5, tl: [38, 51], teams: ['Kansas City Chiefs', 'Buffalo Bills', 'Philadelphia Eagles', 'Baltimore Ravens', 'San Francisco 49ers', 'Detroit Lions', 'Dallas Cowboys', 'Green Bay Packers', 'Cincinnati Bengals', 'Miami Dolphins', 'Houston Texans', 'Los Angeles Rams', 'Pittsburgh Steelers', 'Minnesota Vikings'] },
+    { key: 'americanfootball_ncaaf', title: 'NCAAF', n: 5, sp: true, step: .5, sd: 16, tsd: 16, tl: [44, 62], teams: ['Georgia Bulldogs', 'Texas Longhorns', 'Ohio State Buckeyes', 'Michigan Wolverines', 'Alabama Crimson Tide', 'Oregon Ducks', 'LSU Tigers', 'Notre Dame Fighting Irish', 'Penn State Nittany Lions', 'Clemson Tigers'] },
+    { key: 'baseball_mlb', title: 'MLB', n: 6, sp: true, fixed: 1.5, sd: 4.3, tsd: 4.3, tl: [7, 9.8], teams: ['Los Angeles Dodgers', 'New York Yankees', 'Philadelphia Phillies', 'Atlanta Braves', 'Baltimore Orioles', 'Houston Astros', 'Seattle Mariners', 'San Diego Padres', 'New York Mets', 'Cleveland Guardians', 'Milwaukee Brewers', 'Chicago Cubs'] },
+    { key: 'basketball_wnba', title: 'WNBA', n: 2, sp: true, step: .5, sd: 11, tsd: 15, tl: [155, 172], teams: ['Las Vegas Aces', 'New York Liberty', 'Minnesota Lynx', 'Indiana Fever'] },
+    { key: 'soccer_epl', title: 'EPL', n: 5, three: true, tsd: 1.6, tl: [2.3, 3.2], teams: ['Arsenal', 'Manchester City', 'Liverpool', 'Chelsea', 'Tottenham Hotspur', 'Newcastle United', 'Aston Villa', 'Manchester United', 'Brighton and Hove Albion', 'West Ham United'] },
+    { key: 'soccer_uefa_champs_league', title: 'UCL', n: 4, three: true, tsd: 1.6, tl: [2.4, 3.3], teams: ['Real Madrid', 'Barcelona', 'Bayern Munich', 'Paris Saint Germain', 'Inter Milan', 'Juventus', 'Borussia Dortmund', 'Atletico Madrid'] }
+  ];
+  let events = [];
+  const keysFor = e => { const k = e.three ? ['h0', 'h1', 'h2'] : ['h0', 'h1']; if (e.sp.sp) k.push('s0', 's1'); k.push('t0', 't1'); return k; };
+  function init() {
+    events = []; const now = Date.now(); let id = 0;
+    for (const sp of SPORTS) {
+      const teams = [...sp.teams].sort(() => Math.random() - .5);
+      for (let i = 0; i < sp.n && 2 * i + 1 < teams.length; i++) {
+        const e = { id: 'demo' + (id++), sp, three: !!sp.three, home: teams[2 * i], away: teams[2 * i + 1], commence: new Date(now + rnd(.4, 70) * 36e5).toISOString() };
+        if (sp.three) { const h = rnd(.25, .58), d = rnd(.22, .29); e.p = [h, d, 1 - h - d]; } else { const h = rnd(.22, .78); e.p = [h, 1 - h]; }
+        e.L = rnd(sp.tl[0], sp.tl[1]);
+        e.book = {};
+        for (const [bk] of BOOKS) {
+          const noise = {}; keysFor(e).forEach(k => noise[k] = gauss() * .008);
+          e.book[bk] = { noise, so: Math.random() < .25 ? pick([-1, -.5, .5, 1]) : 0, to: Math.random() < .3 ? pick([-1, 1, -.5, .5]) : 0 };
+        }
+        e.glitch = [];
+        events.push(e);
+      }
+    }
+  }
+  function tick() {
+    for (const e of events) {
+      if (Math.random() < .2) { // the market moves
+        if (e.three) { const j = Math.floor(Math.random() * 3); e.p[j] *= Math.exp(gauss() * .03); const s = sum(e.p); e.p = e.p.map(x => x / s); }
+        else { const lg = Math.log(e.p[0] / e.p[1]) + gauss() * .04; const h = 1 / (1 + Math.exp(-lg)); e.p = [h, 1 - h]; }
+        e.L += gauss() * e.sp.tsd * .008;
+      }
+      for (const bk in e.book) {
+        const b = e.book[bk];
+        for (const k in b.noise) if (Math.random() < .12) b.noise[k] = clamp(b.noise[k] * .85 + gauss() * .005, -.03, .03);
+        if (Math.random() < .004) b.so = Math.random() < .5 ? 0 : pick([-1, -.5, .5, 1]);
+        if (Math.random() < .004) b.to = Math.random() < .5 ? 0 : pick([-1, -.5, .5, 1]);
+      }
+      e.glitch = e.glitch.filter(g => --g.ttl > 0);
+    }
+    // stale / mispriced lines: the fuel of arbitrage
+    const spawns = Math.random() < .7 ? (Math.random() < .35 ? 2 : 1) : 0;
+    for (let i = 0; i < spawns; i++) {
+      const e = pick(events); const bk = pick(BOOKS.filter(b => b[0] !== 'pinnacle'))[0];
+      e.glitch.push({ bk, k: pick(keysFor(e)), mult: rnd(1.03, 1.105), ttl: 4 + Math.floor(Math.random() * 26) });
+    }
+  }
+  const round2 = x => Math.max(1.01, Math.round(x * 100) / 100);
+  function price(e, bk, k, p, m, noiseScale) {
+    const b = e.book[bk]; let pr = 1 / (p * (1 + m)) * (1 + b.noise[k] * noiseScale);
+    for (const g of e.glitch) if (g.bk === bk && g.k === k) pr *= g.mult;
+    return round2(pr);
+  }
+  function snapshot() {
+    const out = [], now = new Date().toISOString();
+    for (const e of events) {
+      const sp = e.sp; const ev = { id: e.id, sport_key: sp.key, sport_title: sp.title, commence_time: e.commence, home_team: e.home, away_team: e.away, bookmakers: [] };
+      const mu = sp.sd ? sp.sd * PhiInv(e.p[0]) : 0;
+      for (const [bk, title, m, ns] of BOOKS) {
+        const b = e.book[bk], markets = [];
+        const names = e.three ? [e.home, 'Draw', e.away] : [e.home, e.away];
+        markets.push({ key: 'h2h', outcomes: names.map((n, i) => ({ name: n, price: price(e, bk, 'h' + i, e.p[i], m, ns) })) });
+        if (sp.sp) {
+          let hp = sp.fixed ? (mu > 0 ? -sp.fixed : sp.fixed) : Math.round(-mu * 2) / 2 + b.so;
+          if (!sp.fixed && hp === 0) hp = -.5;
+          const pc = Phi((mu + hp) / sp.sd);
+          markets.push({ key: 'spreads', outcomes: [{ name: e.home, point: hp, price: price(e, bk, 's0', pc, m, ns) }, { name: e.away, point: -hp, price: price(e, bk, 's1', 1 - pc, m, ns) }] });
+        }
+        const base = sp.three ? (e.L < 2.8 ? 2.5 : 3.5) : Math.floor(e.L) + .5;
+        const tp = Math.max(.5, base + (sp.three ? (Math.abs(b.to) === 1 ? b.to : 0) : b.to * (sp.key.includes('mlb') ? 1 : 2)));
+        const po = 1 - Phi((tp - e.L) / sp.tsd);
+        markets.push({ key: 'totals', outcomes: [{ name: 'Over', point: tp, price: price(e, bk, 't0', po, m, ns) }, { name: 'Under', point: tp, price: price(e, bk, 't1', 1 - po, m, ns) }] });
+        ev.bookmakers.push({ key: bk, title, last_update: now, markets });
+      }
+      out.push(ev);
+    }
+    return out;
+  }
+  return { init, tick, snapshot };
+})();
+
+/* ============================ live feed ============================ */
+const Live = {
+  remaining: null, used: null, busy: false,
+  async fetch() {
+    if (!S.apiKey) throw new Error('Add your Odds API key in Settings to go live.');
+    const sports = S.sports.length ? S.sports : ['upcoming'];
+    const all = [];
+    for (const sp of sports) {
+      const url = `https://api.the-odds-api.com/v4/sports/${encodeURIComponent(sp)}/odds/?apiKey=${encodeURIComponent(S.apiKey)}&regions=${S.regions.join(',')}&markets=${S.markets.join(',')}&oddsFormat=decimal&dateFormat=iso`;
+      const r = await fetch(url);
+      if (r.headers.get('x-requests-remaining') != null) { this.remaining = r.headers.get('x-requests-remaining'); this.used = r.headers.get('x-requests-used'); }
+      if (!r.ok) { let m = r.status + ''; try { m = (await r.json()).message || m; } catch {} throw new Error(`${sp}: ${m}`); }
+      all.push(...await r.json());
+    }
+    return S.prematch ? all.filter(e => new Date(e.commence_time) > Date.now()) : all;
+  },
+  async sports() {
+    const r = await fetch(`https://api.the-odds-api.com/v4/sports/?apiKey=${encodeURIComponent(S.apiKey)}`);
+    if (!r.ok) throw new Error('Could not load sports (' + r.status + ')');
+    return (await r.json()).filter(s => s.active && !s.has_outrights);
+  }
+};
+
+/* ============================ analysis engine ============================ */
+const effOdds = (bk, price) => 1 + (price - 1) * (1 - (S.commission[bk] || 0));
+function legLabel(mkey, name, point) { return mkey === 'totals' ? `${name} ${point}` : mkey === 'spreads' ? `${name} ${fmtPt(point)}` : name; }
+
+function groupEvent(ev) {
+  const groups = new Map();
+  const add = (gkey, mkey, point, name, o) => {
+    let g = groups.get(gkey);
+    if (!g) groups.set(gkey, g = { gid: ev.id + '|' + gkey, ev, mkey, point, offers: {} });
+    (g.offers[name] ||= []).push(o);
+  };
+  for (const bm of ev.bookmakers || []) {
+    if (S.excluded.includes(bm.key)) continue;
+    for (const m of bm.markets || []) {
+      for (const oc of m.outcomes || []) {
+        if (!(oc.price > 1)) continue;
+        const o = { book: bm.key, title: bm.title, price: oc.price, eff: effOdds(bm.key, oc.price), point: oc.point, updated: bm.last_update };
+        if (m.key === 'h2h') add('h2h', 'h2h', null, oc.name, o);
+        else if (m.key === 'totals') add('totals|' + oc.point, 'totals', oc.point, oc.name, o);
+        else if (m.key === 'spreads') { const hp = oc.name === ev.home_team ? oc.point : -oc.point; add('spreads|' + hp, 'spreads', hp, oc.name, o); }
+      }
+    }
+  }
+  const out = [];
+  for (const g of groups.values()) {
+    g.names = Object.keys(g.offers);
+    if (g.mkey === 'h2h' && ev.sport_key.startsWith('soccer') && g.names.length < 3) continue;
+    if (g.names.length < 2) continue;
+    if (g.mkey !== 'h2h' && g.names.length !== 2) continue;
+    g.names.forEach(n => g.offers[n].sort((a, b) => b.eff - a.eff));
+    g.label = g.mkey === 'h2h' ? (g.names.length === 3 ? '1X2 Moneyline' : 'Moneyline') : g.mkey === 'totals' ? `Total ${g.point}` : `Spread ${fmtPt(g.point)}`;
+    g.best = g.names.map(n => ({ name: n, label: legLabel(g.mkey, n, g.mkey === 'spreads' ? g.offers[n][0].point : g.point), ...g.offers[n][0] }));
+    g.sum = sum(g.best.map(b => 1 / b.eff));
+    out.push(g);
+  }
+  return out;
+}
+
+function fairProbs(g) {
+  const sharp = g.names.map(n => g.offers[n].find(o => o.book === S.sharp));
+  if (sharp.every(Boolean)) { const inv = sharp.map(o => 1 / o.price), t = sum(inv); return { p: inv.map(x => x / t), src: sharp[0].title }; }
+  const books = new Set(g.offers[g.names[0]].map(o => o.book));
+  const full = [...books].filter(b => g.names.every(n => g.offers[n].some(o => o.book === b)));
+  if (full.length < 4) return null;
+  const per = g.names.map(() => []);
+  for (const b of full) { const inv = g.names.map(n => 1 / g.offers[n].find(o => o.book === b).price), t = sum(inv); inv.forEach((x, i) => per[i].push(x / t)); }
+  const med = per.map(a => { a.sort((x, y) => x - y); const m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2; });
+  const t = sum(med); return { p: med.map(x => x / t), src: 'consensus (' + full.length + ' books)' };
+}
+
+function analyze(events) {
+  const t0 = performance.now();
+  const arbs = [], mids = [], evs = [], cells = [], bookSet = new Set();
+  for (const ev of events) {
+    (ev.bookmakers || []).forEach(b => { bookSet.add(b.key); BOOKTITLE[b.key] = b.title; });
+    const groups = groupEvent(ev);
+    for (const g of groups) {
+      cells.push({ id: g.gid, ev, label: g.label, sum: g.sum });
+      if (g.sum < 1) arbs.push({ id: g.gid, type: 'arb', ev, group: g, legs: g.best, sum: g.sum, roi: 1 / g.sum - 1, market: g.label });
+      const fp = fairProbs(g);
+      if (fp) g.names.forEach((n, i) => {
+        const p = fp.p[i];
+        for (const o of g.offers[n]) {
+          if (o.book === S.sharp) continue;
+          const edge = o.eff * p - 1; if (edge * 100 < S.evMin) break; // offers sorted: first failure ends it
+          const b = o.eff - 1, kelly = (b * p - (1 - p)) / b;
+          evs.push({ id: g.gid + '|' + n + '|' + o.book, type: 'ev', ev, group: g, name: n, leg: { name: n, label: legLabel(g.mkey, n, o.point ?? g.point), ...o }, p, fair: 1 / p, edge, kelly, src: fp.src, market: g.label });
+          break; // best price only
+        }
+      });
+    }
+    // middles on totals and spreads
+    for (const mkey of ['totals', 'spreads']) {
+      const gs = groups.filter(g => g.mkey === mkey); if (gs.length < 2) continue;
+      const sd = sdFor(ev.sport_key, mkey);
+      const [nA, nB] = mkey === 'totals' ? ['Over', 'Under'] : [ev.home_team, ev.away_team];
+      for (const ga of gs) for (const gb of gs) {
+        if (ga === gb || !ga.offers[nA] || !gb.offers[nB]) continue;
+        const a = ga.offers[nA][0], b = gb.offers[nB][0];
+        // totals: Over x & Under y win together if x < T < y. spreads: home +h & away +a' win together if -h < margin < a'
+        let lo, hi;
+        if (mkey === 'totals') { lo = ga.point; hi = gb.point; } else { lo = -ga.point; hi = gb.offers[nB][0].point; }
+        const width = hi - lo; if (width < 1) continue;
+        const ints = []; for (let n = Math.floor(lo) + 1; n < hi; n++) ints.push(n);
+        if (!ints.length) continue;
+        // centre the distribution where the two prices say the game is (vig ~2.5%/side removed), not on the window
+        const pA = clamp(1 / a.price / 1.025, .02, .98), pB = clamp(1 / b.price / 1.025, .02, .98);
+        const center = ((lo - sd * PhiInv(1 - pA)) + (hi - sd * PhiInv(pB))) / 2;
+        let hit = ints.reduce((acc, n) => acc + (Phi((n + .5 - center) / sd) - Phi((n - .5 - center) / sd)), 0);
+        if (mkey === 'spreads' && ev.sport_key.includes('football')) ints.forEach(n => { if (Math.abs(n) === 3) hit += .045; if (Math.abs(n) === 7) hit += .025; });
+        hit = clamp(hit, 0, .9);
+        const s = 1 / a.eff + 1 / b.eff;
+        const single = 1 / s - 1, both = 2 / s - 1; // per $1 total staked
+        const evp = hit * both + (1 - hit) * single;
+        if (evp <= 0 && s >= 1) continue;
+        mids.push({ id: `${ev.id}|mid|${mkey}|${lo}|${hi}|${a.book}|${b.book}`, type: 'mid', ev, mkey, lo, hi, width, hit, evp, sum: s, single, both,
+          legs: [{ name: nA, label: legLabel(mkey, nA, a.point ?? ga.point), ...a }, { name: nB, label: legLabel(mkey, nB, b.point ?? gb.point), ...b }],
+          market: mkey === 'totals' ? `Total ${lo} ↔ ${hi}` : `Spread window ${width}` });
+      }
+    }
+  }
+  // keep the best middle per event+book pair window
+  mids.sort((x, y) => y.evp - x.evp);
+  const seen = new Set(); const midsTop = mids.filter(m => { const k = m.ev.id + m.mkey + m.lo + m.hi; if (seen.has(k)) return false; seen.add(k); return true; });
+  arbs.sort((x, y) => y.roi - x.roi); evs.sort((x, y) => y.edge - x.edge);
+  return { arbs, mids: midsTop, evs, cells, books: bookSet.size, ms: performance.now() - t0 };
+}
+const BOOKTITLE = {};
+
+/* ============================ app state ============================ */
+const state = {
+  tab: 'arb', view: 'scanner', res: { arbs: [], mids: [], evs: [], cells: [], books: 0 }, events: [],
+  track: new Map(), grave: store.get('arbx.grave', []), flow: [], tape: [], prevPrices: new Map(), selId: null, selOpp: null,
+  paused: false, timer: null, scans: 0, ledger: store.get('arbx.ledger', [])
+};
+
+function diffTape(events) {
+  const next = new Map(), moves = [];
+  for (const ev of events) for (const bm of ev.bookmakers || []) for (const m of bm.markets || []) for (const oc of m.outcomes || []) {
+    const k = `${ev.id}|${bm.key}|${m.key}|${oc.name}|${oc.point ?? ''}`; next.set(k, oc.price);
+    const old = state.prevPrices.get(k);
+    if (old != null && old !== oc.price) moves.push({ t: Date.now(), ev: `${ev.away_team.split(' ').pop()} @ ${ev.home_team.split(' ').pop()}`, book: bm.title, label: legLabel(m.key, oc.name.split(' ').pop(), oc.point), old, nw: oc.price, mag: Math.abs(oc.price / old - 1) });
+  }
+  state.prevPrices = next;
+  moves.sort((a, b) => b.mag - a.mag);
+  state.tape = [...moves.slice(0, 8), ...state.tape].slice(0, 40);
+}
+
+let audioCtx = null;
+function ping() {
+  if (!S.sound) return;
+  try {
+    audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination);
+    o.type = 'sine'; o.frequency.setValueAtTime(880, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(1760, audioCtx.currentTime + .12);
+    g.gain.setValueAtTime(.12, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(.0001, audioCtx.currentTime + .35); o.start(); o.stop(audioCtx.currentTime + .36);
+  } catch {}
+}
+
+function ingest(events) {
+  state.events = events; state.scans++;
+  diffTape(events);
+  const res = analyze(events); state.res = res;
+  const now = Date.now(), live = new Set();
+  let alerts = [];
+  for (const o of [...res.arbs, ...res.mids, ...res.evs]) {
+    live.add(o.id);
+    let t = state.track.get(o.id);
+    const score = o.type === 'arb' ? o.roi : o.type === 'mid' ? o.evp : o.edge;
+    if (!t) { t = { first: now, hist: [], peak: score, fresh: true }; state.track.set(o.id, t); if (o.type === 'arb' && o.roi * 100 >= S.alertRoi && state.scans > 1) alerts.push(o); }
+    else t.fresh = false;
+    t.hist.push(score); if (t.hist.length > 40) t.hist.shift(); t.peak = Math.max(t.peak, score); t.last = o;
+  }
+  for (const [id, t] of state.track) if (!live.has(id)) {
+    if (t.last && t.last.type === 'arb') state.grave.unshift({ ev: `${t.last.ev.away_team} @ ${t.last.ev.home_team}`, sport: t.last.ev.sport_title, market: t.last.market, peak: t.peak, life: now - t.first, closed: now, books: t.last.legs.map(l => l.title).join(' · ') });
+    state.track.delete(id);
+  }
+  state.grave = state.grave.slice(0, 200); store.set('arbx.grave', state.grave);
+  state.flow.push(res.arbs.length); if (state.flow.length > 120) state.flow.shift();
+  if (alerts.length) {
+    ping(); const a = alerts[0];
+    toast(`<b class="pos">NEW ARB ${pct(a.roi)}</b><br>${esc(a.ev.away_team)} @ ${esc(a.ev.home_team)} · ${esc(a.market)}`);
+    if (S.sound && 'Notification' in window && Notification.permission === 'granted' && document.hidden) new Notification(`ARBX ${pct(a.roi)} arb`, { body: `${a.ev.away_team} @ ${a.ev.home_team} · ${a.market}` });
+  }
+  renderScanner();
+}
+
+/* ============================ stake panel ============================ */
+class StakePanel {
+  constructor(root, opts = {}) { this.root = root; this.opts = opts; this.cfg = { total: S.bankroll, round: S.rounding, biasIdx: -1, bias: 0, maxLeg: 0, anchor: null }; this.legs = []; this.sig = ''; }
+  setLegs(legs, meta) {
+    const sig = legs.map(l => (l.book || '') + '§' + l.label).join('|');
+    this.legs = legs.map(l => ({ ...l, eff: 1 + (l.price - 1) * (1 - (l.comm ?? S.commission[l.book] ?? 0)) }));
+    this.meta = meta;
+    if (sig !== this.sig) { this.sig = sig; this.cfg.anchor = null; this.cfg.biasIdx = -1; this.cfg.bias = 0; this.build(); }
+    this.update();
+  }
+  build() {
+    const L = this.legs;
+    this.root.innerHTML = `
+      <div class="gapwrap"><div class="gap"></div><div class="gapcap"><span class="g1"></span><span class="g2"></span></div></div>
+      <div class="sp-ctl">
+        <label class="field"><span>STAKE $</span><input data-c="total" type="number" min="1" step="10" value="${this.cfg.total}"></label>
+        <label class="field"><span>ROUND</span><select data-c="round">${[[.01, 'cents'], [1, '$1'], [5, '$5'], [10, '$10'], [25, '$25']].map(([v, n]) => `<option value="${v}" ${+this.cfg.round === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+        <label class="field"><span>MAX/LEG $</span><input data-c="maxLeg" type="number" min="0" step="10" placeholder="none" value="${this.cfg.maxLeg || ''}"></label>
+        <label class="field"><span>BIAS →</span><select data-c="biasIdx"><option value="-1">equal profit</option>${L.map((l, i) => `<option value="${i}">${esc(l.label)}</option>`).join('')}</select></label>
+        <div class="bias"><span class="mono muted" style="font-size:11px">RISK-FREE LEAN</span><input data-c="bias" type="range" min="0" max="100" value="0"><span class="mono bv" style="font-size:11px;width:34px">0%</span></div>
+      </div>
+      <table class="legtbl"><thead><tr><th>Book / outcome</th><th>Odds</th><th>Impl.</th><th>Stake</th><th>If wins</th></tr></thead><tbody>
+      ${L.map((l, i) => `<tr data-i="${i}"><td><div class="book">${esc(l.title || l.book || 'Leg ' + (i + 1))}</div><div class="muted" style="font-size:12px">${esc(l.label)}</div></td>
+        <td class="mono o"></td><td class="mono muted imp"></td><td><input data-stake="${i}" type="number" min="0" step="1"></td><td class="mono pl"></td></tr>`).join('')}
+      </tbody></table>
+      <div class="sum"><div><div class="l">Total staked</div><div class="v tot"></div></div><div><div class="l">Guaranteed</div><div class="v mn"></div></div><div><div class="l">Worst-case ROI</div><div class="v roi2"></div></div></div>
+      <div class="row"><button class="btn sm cp">Copy bet slip</button><button class="btn sm pri lg">Log to ledger</button><button class="btn sm rs">Reset</button></div>`;
+    const r = this.root;
+    r.querySelector('[data-c=total]').oninput = e => { this.cfg.total = Math.max(0, +e.target.value || 0); this.cfg.anchor = null; this.update(); };
+    r.querySelector('[data-c=round]').onchange = e => { this.cfg.round = +e.target.value; this.update(); };
+    r.querySelector('[data-c=maxLeg]').oninput = e => { this.cfg.maxLeg = +e.target.value || 0; this.update(); };
+    r.querySelector('[data-c=biasIdx]').onchange = e => { this.cfg.biasIdx = +e.target.value; if (this.cfg.biasIdx >= 0 && !this.cfg.bias) { this.cfg.bias = .5; r.querySelector('[data-c=bias]').value = 50; } this.cfg.anchor = null; this.update(); };
+    r.querySelector('[data-c=bias]').oninput = e => { this.cfg.bias = +e.target.value / 100; if (this.cfg.biasIdx < 0 && this.cfg.bias > 0) { this.cfg.biasIdx = 0; r.querySelector('[data-c=biasIdx]').value = 0; } this.cfg.anchor = null; this.update(); };
+    r.querySelectorAll('[data-stake]').forEach(inp => inp.oninput = e => { const v = +e.target.value; if (v > 0) { this.cfg.anchor = { i: +inp.dataset.stake, amt: v }; this.update(); } });
+    r.querySelector('.rs').onclick = () => { this.cfg = { total: S.bankroll, round: S.rounding, biasIdx: -1, bias: 0, maxLeg: 0, anchor: null }; this.build(); this.update(); };
+    r.querySelector('.cp').onclick = () => { const txt = this.slip(); navigator.clipboard?.writeText(txt).then(() => toast('Bet slip copied'), () => toast('Clipboard blocked', true)); };
+    r.querySelector('.lg').onclick = () => { const c = this.compute(); if (!c || !c.tot) return; logBet(this.meta, this.legs, c); };
+  }
+  compute() {
+    const L = this.legs, c = this.cfg, n = L.length; if (n < 2 || L.some(l => !(l.eff > 1))) return null;
+    const inv = L.map(l => 1 / l.eff), Ssum = sum(inv);
+    let st;
+    if (c.anchor && c.anchor.i < n) { const P = c.anchor.amt * L[c.anchor.i].eff; st = L.map((l, i) => i === c.anchor.i ? c.anchor.amt : P / l.eff); }
+    else {
+      const T = c.total; st = inv.map(x => T * x / Ssum);
+      if (c.biasIdx >= 0 && c.biasIdx < n && c.bias > 0) {
+        const k = c.biasIdx, b = inv.map((x, i) => i === k ? 0 : T * x); b[k] = T - sum(b);
+        if (b[k] > 0) st = st.map((e, i) => e * (1 - c.bias) + b[i] * c.bias);
+      }
+    }
+    if (c.maxLeg > 0) { const mx = Math.max(...st); if (mx > c.maxLeg) { const f = c.maxLeg / mx; st = st.map(s => s * f); } }
+    const r = c.round;
+    if (r >= 1) st = (c.anchor || c.bias > 0) ? st.map((s, i) => c.anchor && i === c.anchor.i ? s : Math.max(r, Math.round(s / r) * r)) : optimizeRound(st, L, r);
+    else st = st.map(s => Math.round(s * 100) / 100);
+    const tot = sum(st), rows = L.map((l, i) => { const ret = st[i] * l.eff; return { stake: st[i], ret, pl: ret - tot }; });
+    const pls = rows.map(x => x.pl);
+    return { st, tot, rows, min: Math.min(...pls), max: Math.max(...pls), Ssum, roi: tot ? Math.min(...pls) / tot : 0 };
+  }
+  update() {
+    const c = this.compute(), r = this.root; if (!c) return;
+    const L = this.legs, colors = ['#3dd6f5', '#9b7bff', '#ffb020', '#ff7ab6', '#7dffb2', '#8fb4ff'];
+    const scale = Math.max(1, c.Ssum);
+    r.querySelector('.gap').innerHTML = L.map((l, i) => `<div class="seg" style="width:${(1 / l.eff) / scale * 100}%;background:${colors[i % 6]}">${pct(1 / l.eff, 1)}</div>`).join('')
+      + (c.Ssum < 1 ? `<div class="edge" style="width:${(1 - c.Ssum) * 100}%">EDGE</div>` : '') + `<div class="mark" style="left:${100 / scale}%"></div>`;
+    r.querySelector('.g1').textContent = `Σ implied ${pct(c.Ssum)}`;
+    const g2 = r.querySelector('.g2'); g2.textContent = c.Ssum < 1 ? `arbitrage margin ${pct(1 - c.Ssum)}` : `book edge ${pct(c.Ssum - 1)}`; g2.className = 'g2 ' + (c.Ssum < 1 ? 'pos' : 'neg');
+    r.querySelectorAll('tbody tr').forEach(tr => {
+      const i = +tr.dataset.i, l = L[i], row = c.rows[i];
+      tr.querySelector('.o').innerHTML = `${fmtOdds(l.price)}${l.eff < l.price - 1e-9 ? `<div class="muted" style="font-size:10px">net ${l.eff.toFixed(3)}</div>` : ''}`;
+      tr.querySelector('.imp').textContent = pct(1 / l.eff, 1);
+      const inp = tr.querySelector('input'); if (document.activeElement !== inp) inp.value = row.stake.toFixed(c.st[i] % 1 ? 2 : 0);
+      tr.querySelector('.pl').innerHTML = `${money(row.ret)}<div class="${row.pl >= 0 ? 'pos' : 'neg'}" style="font-size:11px">${row.pl >= 0 ? '+' : ''}${money(row.pl)}</div>`;
+    });
+    r.querySelector('.tot').textContent = money(c.tot);
+    const mn = r.querySelector('.mn'); mn.textContent = (c.min >= 0 ? '+' : '') + money(c.min); mn.className = 'v mn ' + (c.min >= 0 ? 'pos' : 'neg');
+    const ro = r.querySelector('.roi2'); ro.textContent = pct(c.roi); ro.className = 'v roi2 ' + (c.roi >= 0 ? 'pos' : 'neg');
+    r.querySelector('.bv').textContent = Math.round(this.cfg.bias * 100) + '%';
+    this.last = c;
+  }
+  slip() {
+    const c = this.last || this.compute(); if (!c) return '';
+    const m = this.meta || {};
+    return [`ARBX slip · ${m.event || 'Manual'} · ${m.market || ''}`, ...this.legs.map((l, i) => `• ${l.title || l.book || 'Leg ' + (i + 1)}: ${l.label} @ ${fmtOdds(l.price)} (${l.price.toFixed(2)}) → stake ${money(c.st[i])} → returns ${money(c.rows[i].ret)}`),
+      `Total ${money(c.tot)} | guaranteed ${money(c.min)} (${pct(c.roi)})`].join('\n');
+  }
+}
+function optimizeRound(st, L, r) {
+  const cands = st.map(s => [...new Set([Math.max(r, Math.floor(s / r) * r), Math.max(r, Math.ceil(s / r) * r)])]);
+  const combos = cands.reduce((a, c) => a * c.length, 1);
+  if (combos > 4096) return st.map(s => Math.max(r, Math.round(s / r) * r));
+  const target = sum(st); let best = null, bs = -Infinity, bd = Infinity;
+  for (let m = 0; m < combos; m++) {
+    let x = m; const pk = cands.map(c => { const v = c[x % c.length]; x = Math.floor(x / c.length); return v; });
+    const t = sum(pk); const roi = Math.min(...pk.map((s, i) => s * L[i].eff - t)) / t; const d = Math.abs(t - target);
+    if (t > target + r * .5 + 1e-9 && best) continue;
+    if (roi > bs + 1e-9 || (Math.abs(roi - bs) < 1e-9 && d < bd)) { bs = roi; bd = d; best = pk; }
+  }
+  return best;
+}
+
+/* ============================ scanner rendering ============================ */
+const spark = (h, color = '#19e68c') => {
+  if (!h || h.length < 2) return '<svg width="64" height="18"></svg>';
+  const mn = Math.min(...h), mx = Math.max(...h), rg = mx - mn || 1;
+  const pts = h.map((v, i) => `${(i / (h.length - 1) * 62 + 1).toFixed(1)},${(16 - (v - mn) / rg * 14).toFixed(1)}`).join(' ');
+  return `<svg width="64" height="18" viewBox="0 0 64 18"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+};
+const evCell = ev => { const live = new Date(ev.commence_time) < Date.now(); const d = new Date(ev.commence_time);
+  return `<div class="ev"><div class="t"><span class="tag ${live ? 'live' : ''}">${live ? 'LIVE' : esc(ev.sport_title)}</span>${esc(ev.away_team)} @ ${esc(ev.home_team)}</div>
+  <div class="m">${d.toLocaleDateString(undefined, { weekday: 'short' })} ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div></div>`; };
+const legChips = legs => `<div class="legs">${legs.map(l => `<span class="chip"><i>${esc(l.title)}</i> ${esc(l.label.length > 22 ? l.label.split(' ').slice(-2).join(' ') : l.label)} <b>${fmtOdds(l.price)}</b></span>`).join('')}</div>`;
+
+function filtered() {
+  const { arbs, mids, evs } = state.res; const q = $('#q').value.trim().toLowerCase(), sp = $('#sportF').value, min = +$('#minRoi').value || 0;
+  const ok = o => (!sp || o.ev.sport_title === sp) && (!q || `${o.ev.home_team} ${o.ev.away_team} ${(o.legs || [o.leg]).map(l => l.title).join(' ')}`.toLowerCase().includes(q));
+  return { arb: arbs.filter(o => ok(o) && o.roi * 100 >= min), mid: mids.filter(ok), ev: evs.filter(ok) };
+}
+
+function renderScanner() {
+  const { res } = state; const f = filtered(); const now = Date.now();
+  // KPIs
+  const best = res.arbs[0];
+  $('#k-arbs .v').textContent = res.arbs.length; $('#k-arbs').classList.toggle('hot', res.arbs.length > 0);
+  $('#k-arbs .s').textContent = res.arbs.filter(a => a.roi >= .02).length + ' above 2%';
+  $('#k-best').textContent = best ? pct(best.roi) : '—';
+  $('#k-best-s').textContent = best ? `${best.ev.home_team.split(' ').pop()} · ${best.market}` : ' ';
+  $('#k-table').textContent = money(sum(res.arbs.map(a => a.roi * S.bankroll)), 0);
+  $('#k-mid').textContent = res.mids.length; $('#k-ev').textContent = res.evs.length;
+  $('#k-ev-s').textContent = res.evs[0] ? 'top edge ' + pct(res.evs[0].edge, 1) : 'vs sharp line';
+  $('#k-mk').textContent = res.cells.length; $('#k-mk-s').textContent = `${res.books} books · ${state.events.length} events · ${res.ms.toFixed(1)}ms`;
+  const lifes = state.grave.slice(0, 50).map(g => g.life);
+  $('#k-life').textContent = lifes.length ? ago(sum(lifes) / lifes.length) : '—';
+  $('#k-life-s').textContent = state.grave.length + ' closed';
+  ['arb', 'mid', 'ev'].forEach(t => $('#n-' + t).textContent = f[t].length);
+  // sport filter
+  const sports = [...new Set(state.events.map(e => e.sport_title))].sort(); const sf = $('#sportF');
+  if (sf.dataset.v !== sports.join()) { const cur = sf.value; sf.innerHTML = '<option value="">All</option>' + sports.map(s => `<option ${s === cur ? 'selected' : ''}>${esc(s)}</option>`).join(''); sf.dataset.v = sports.join(); }
+  // table
+  const rows = f[state.tab];
+  const heads = { arb: ['ROI', 'Event', 'Market', 'Legs (best price)', 'Profit', 'Age', 'Trend'], mid: ['EV', 'Event', 'Window', 'Legs', 'Hit est.', 'Worst', 'Age'], ev: ['Edge', 'Event', 'Bet', 'Book', 'Fair', '¼ Kelly', 'Age'] }[state.tab];
+  $('#thead').innerHTML = '<tr>' + heads.map(h => `<th>${h}</th>`).join('') + '</tr>';
+  const tb = $('#tbody');
+  if (!rows.length) tb.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="big">${state.tab === 'arb' ? '⟁' : state.tab === 'mid' ? '⇆' : '∿'}</div>${state.events.length ? 'Nothing matches right now. The scanner keeps watching.' : 'Waiting for the first scan…'}</div></td></tr>`;
+  else tb.innerHTML = rows.slice(0, 150).map(o => {
+    const t = state.track.get(o.id) || { first: now, hist: [] }; const cls = (o.id === state.selId ? 'sel ' : '') + (t.fresh ? 'fresh' : '');
+    const age = `<span class="age" data-first="${t.first}">${ago(now - t.first)}</span>`;
+    if (o.type === 'arb') return `<tr class="${cls}" data-id="${esc(o.id)}"><td><span class="roi ${o.roi >= .02 ? 'big' : ''}">${pct(o.roi)}</span></td><td>${evCell(o.ev)}</td><td class="mono" style="font-size:12px">${esc(o.market)}</td><td>${legChips(o.legs)}</td><td class="mono pos">+${money(o.roi * S.bankroll)}</td><td>${age}</td><td>${spark(t.hist)}</td></tr>`;
+    if (o.type === 'mid') return `<tr class="${cls}" data-id="${esc(o.id)}"><td><span class="roi" style="color:${o.evp > 0 ? 'var(--green)' : 'var(--amber)'}">${pct(o.evp)}</span></td><td>${evCell(o.ev)}</td><td class="mono" style="font-size:12px;white-space:nowrap">${esc(o.market)}<div class="muted">${o.width} pt${o.width === 1 ? '' : 's'} wide</div></td><td>${legChips(o.legs)}</td><td class="mono">${pct(o.hit, 1)}</td><td class="mono ${o.single >= 0 ? 'pos' : 'neg'}">${pct(o.single)}</td><td>${age}</td></tr>`;
+    return `<tr class="${cls}" data-id="${esc(o.id)}"><td><span class="roi" style="color:var(--violet)">${pct(o.edge)}</span></td><td>${evCell(o.ev)}</td><td style="font-size:12px"><b>${esc(o.leg.label)}</b><div class="muted mono">${esc(o.market)}</div></td><td class="mono">${esc(o.leg.title)} <b>${fmtOdds(o.leg.price)}</b></td><td class="mono muted">${fmtOdds(o.fair)}</td><td class="mono pos">${money(Math.max(0, o.kelly / 4 * S.bankroll))}</td><td>${age}</td></tr>`;
+  }).join('');
+  renderDetail(); renderHeat(); renderBooks(); renderTape(); renderGrave(); drawFlow();
+}
+
+function findOpp(id) { const r = state.res; return r.arbs.find(o => o.id === id) || r.mids.find(o => o.id === id) || r.evs.find(o => o.id === id); }
+let detailPanel = null;
+function renderDetail() {
+  const box = $('#detail'); if (!state.selId) return;
+  const cur = findOpp(state.selId); const closed = !cur; const o = cur || state.selOpp; if (!o) return;
+  state.selOpp = o;
+  const title = `${o.ev.away_team} @ ${o.ev.home_team}`, t = state.track.get(o.id);
+  if (box.dataset.id !== o.id) {
+    box.dataset.id = o.id;
+    box.innerHTML = `<div class="dh"><div><div class="t">${esc(title)}</div><div class="m">${esc(o.ev.sport_title)} · ${esc(o.market)} · ${new Date(o.ev.commence_time).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}</div></div><span class="badge"></span></div>
+      <div class="dinfo"></div><div class="dstake"></div><div class="ladder"></div>`;
+    detailPanel = o.type === 'ev' ? null : new StakePanel(box.querySelector('.dstake'));
+  }
+  const badge = box.querySelector('.badge');
+  if (closed) { badge.className = 'badge dead'; badge.textContent = 'CLOSED · line moved'; }
+  else if (o.type === 'arb') { badge.className = 'badge'; badge.textContent = `ARB ${pct(o.roi)} · ${t ? ago(Date.now() - t.first) : ''}`; }
+  else if (o.type === 'mid') { badge.className = 'badge v'; badge.textContent = `MIDDLE EV ${pct(o.evp)}`; }
+  else { badge.className = 'badge v'; badge.textContent = `+EV ${pct(o.edge)}`; }
+  const info = box.querySelector('.dinfo');
+  if (o.type === 'mid') {
+    const span = o.hi - o.lo, pad = Math.max(2, span), a = o.lo - pad, b = o.hi + pad, X = v => ((v - a) / (b - a) * 100).toFixed(2) + '%';
+    const lA = o.mkey === 'totals' ? `Over ${o.lo}` : `${o.ev.home_team.split(' ').pop()} ${fmtPt(-o.lo)}`, lB = o.mkey === 'totals' ? `Under ${o.hi}` : `${o.ev.away_team.split(' ').pop()} ${fmtPt(o.hi)}`;
+    info.innerHTML = `<div class="window"><div class="axis"></div><div class="zone" style="left:${X(o.lo)};width:calc(${X(o.hi)} - ${X(o.lo)})"></div>
+      <div class="over" style="left:${X(o.lo)};right:0" title="${esc(lA)}"></div><div class="under" style="left:0;width:${X(o.hi)}" title="${esc(lB)}"></div>
+      ${[o.lo, o.hi].map(v => `<div class="tk" style="left:${X(v)}">${v}</div>`).join('')}</div>
+      <div class="mono muted" style="font-size:11px;margin-bottom:10px"><span style="color:var(--cyan)">■ ${esc(lA)}</span> &nbsp; <span style="color:var(--amber)">■ ${esc(lB)}</span> &nbsp; <span class="pos">■ both win</span> ${o.mkey === 'spreads' ? '(home margin)' : ''}</div>
+      <div class="info"><div><div class="l">Middle hit (est.)</div><div class="v">${pct(o.hit, 1)}</div></div><div><div class="l">Expected value</div><div class="v ${o.evp >= 0 ? 'pos' : 'neg'}">${pct(o.evp)}</div></div>
+      <div><div class="l">If middle hits</div><div class="v pos">+${pct(o.both)}</div></div><div><div class="l">Otherwise</div><div class="v ${o.single >= 0 ? 'pos' : 'neg'}">${pct(o.single)}</div></div></div>`;
+  } else if (o.type === 'ev') {
+    const k = Math.max(0, o.kelly);
+    info.innerHTML = `<div class="info"><div><div class="l">Price</div><div class="v">${fmtOdds(o.leg.price)} <span class="muted" style="font-size:12px">${esc(o.leg.title)}</span></div></div><div><div class="l">Fair (no-vig)</div><div class="v">${fmtOdds(o.fair)}</div></div>
+      <div><div class="l">True win prob</div><div class="v">${pct(o.p, 1)}</div></div><div><div class="l">Edge</div><div class="v" style="color:var(--violet)">+${pct(o.edge)}</div></div>
+      <div><div class="l">Full Kelly</div><div class="v">${money(k * S.bankroll)}</div></div><div><div class="l">½ · ¼ Kelly</div><div class="v pos">${money(k / 2 * S.bankroll, 0)} · ${money(k / 4 * S.bankroll, 0)}</div></div></div>
+      <div class="mono muted" style="font-size:11px">Fair line from ${esc(o.src)}. Expected profit at ¼ Kelly: <span class="pos">${money(k / 4 * S.bankroll * o.edge)}</span> per bet.</div>`;
+  } else info.innerHTML = '';
+  if (detailPanel) detailPanel.setLegs(o.legs.map(l => ({ ...l })), { event: title, market: o.market, type: o.type, id: o.id });
+  // price ladder
+  const g = o.group; const lad = box.querySelector('.ladder');
+  if (g) {
+    const names = o.type === 'ev' ? [o.name] : g.names;
+    lad.innerHTML = '<h3 style="margin-top:6px">Price ladder · every book</h3>' + names.map(n => {
+      const offs = g.offers[n]; const mx = offs[0].eff, mn = offs[offs.length - 1].eff, rg = mx - mn || 1;
+      return `<h4>${esc(legLabel(g.mkey, n, offs[0].point ?? g.point))}</h4>` + offs.slice(0, 10).map((x, i) => `<div class="lad ${i === 0 ? 'best' : ''}"><span class="n">${esc(x.title)}</span><span class="bar"><i style="width:${(12 + (x.eff - mn) / rg * 88).toFixed(1)}%"></i></span><span style="text-align:right">${fmtOdds(x.price)}</span></div>`).join('');
+    }).join('');
+  } else lad.innerHTML = '';
+}
+
+function renderHeat() {
+  const cells = state.res.cells.slice().sort((a, b) => a.sum - b.sum).slice(0, 700);
+  $('#heatN').textContent = state.res.cells.length + ' markets';
+  const col = s => {
+    if (s < 1) { const k = clamp((1 - s) / .03, .25, 1); return `rgba(25,230,140,${k})`; }
+    const x = clamp((s - 1) / .08, 0, 1); const lerp = (a, b) => Math.round(a + (b - a) * x);
+    return `rgb(${lerp(16, 12)},${lerp(90, 17)},${lerp(80, 25)})`;
+  };
+  $('#heat').innerHTML = cells.map(c => `<div style="background:${col(c.sum)}${c.sum < 1 ? ';box-shadow:0 0 6px rgba(25,230,140,.7)' : ''}" data-id="${esc(c.id)}" title="${esc(c.ev.away_team + ' @ ' + c.ev.home_team + ' · ' + c.label + ' · Σ ' + (c.sum * 100).toFixed(2) + '%')}"></div>`).join('');
+}
+function renderBooks() {
+  const cnt = {};
+  for (const a of state.res.arbs) a.legs.forEach(l => cnt[l.title] = (cnt[l.title] || 0) + 1);
+  for (const e of state.res.evs) cnt[e.leg.title] = (cnt[e.leg.title] || 0) + .5;
+  const rows = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 9); const mx = rows[0]?.[1] || 1;
+  $('#books').innerHTML = rows.length ? rows.map(([n, v]) => `<div class="bk"><span class="n">${esc(n)}</span><span class="bar"><i style="width:${v / mx * 100}%"></i></span><span class="mono muted">${Math.round(v * 10) / 10}</span></div>`).join('')
+    + '<div class="muted" style="font-size:11px;margin-top:8px">Books that most often post the best price in arbs and +EV spots. These are the accounts worth funding.</div>' : '<div class="muted">No edges yet.</div>';
+}
+function renderTape() {
+  $('#tapeN').textContent = state.tape.length ? '' : '';
+  $('#tape').innerHTML = state.tape.slice(0, 22).map(m => `<div><span class="muted">${new Date(m.t).toLocaleTimeString([], { hour12: false })}</span><span class="x">${esc(m.book)} · ${esc(m.ev)} · ${esc(m.label)}</span><span class="${m.nw > m.old ? 'pos' : 'neg'}">${fmtOdds(m.old)}→${fmtOdds(m.nw)} ${m.nw > m.old ? '▲' : '▼'}</span></div>`).join('') || '<div class="muted">Waiting for line moves…</div>';
+}
+function renderGrave() {
+  $('#grave').innerHTML = state.grave.slice(0, 12).map(g => `<div><div class="x"><b class="pos">${pct(g.peak)}</b> · ${esc(g.ev)}</div><div class="muted mono" style="font-size:11px">${esc(g.sport)} · ${esc(g.market)} · lived <b style="color:var(--text)">${ago(g.life)}</b> · ${ago(Date.now() - g.closed)} ago</div><div class="muted" style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(g.books)}</div></div>`).join('') || '<div class="muted">No closed arbs yet.</div>';
+}
+function drawFlow() {
+  const cv = $('#flow'); const dpr = devicePixelRatio || 1; const w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
+  cv.width = w * dpr; cv.height = h * dpr; const c = cv.getContext('2d'); c.scale(dpr, dpr); c.clearRect(0, 0, w, h);
+  const d = state.flow; if (d.length < 2) return; const mx = Math.max(3, ...d);
+  const X = i => i / (d.length - 1) * w, Y = v => h - 3 - v / mx * (h - 8);
+  const gr = c.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, 'rgba(25,230,140,.45)'); gr.addColorStop(1, 'rgba(25,230,140,0)');
+  c.beginPath(); c.moveTo(0, h); d.forEach((v, i) => c.lineTo(X(i), Y(v))); c.lineTo(w, h); c.closePath(); c.fillStyle = gr; c.fill();
+  c.beginPath(); d.forEach((v, i) => i ? c.lineTo(X(i), Y(v)) : c.moveTo(0, Y(v))); c.strokeStyle = '#19e68c'; c.lineWidth = 1.6; c.stroke();
+  c.fillStyle = '#19e68c'; c.beginPath(); c.arc(X(d.length - 1), Y(d[d.length - 1]), 3, 0, 7); c.fill();
+  c.fillStyle = '#7d8a9a'; c.font = '10px JetBrains Mono, monospace'; c.fillText('peak ' + Math.max(...d), 4, 11);
+}
+
+/* ============================ ledger ============================ */
+function logBet(meta, legs, c) {
+  state.ledger.unshift({ id: Date.now().toString(36), ts: Date.now(), event: meta?.event || 'Manual calc', market: meta?.market || '', legs: legs.map((l, i) => ({ book: l.title || l.book || 'Leg ' + (i + 1), label: l.label, price: l.price, eff: l.eff, stake: c.st[i] })), total: c.tot, locked: c.min, result: null });
+  store.set('arbx.ledger', state.ledger); toast(`Logged ${money(c.tot)} · locked ${money(c.min)}`); renderLedger();
+}
+function renderLedger() {
+  const L = state.ledger;
+  const pnl = e => { if (e.result == null) return null; if (e.result === 'void') return 0; const l = e.legs[e.result]; return l.stake * l.eff - e.total; };
+  const settled = L.filter(e => e.result != null), open = L.filter(e => e.result == null);
+  const real = sum(settled.map(pnl));
+  $('#l-real').textContent = money(real); $('#l-real').className = 'v ' + (real >= 0 ? 'pos' : 'neg');
+  $('#l-open').textContent = money(sum(open.map(e => e.total))); $('#l-lock').textContent = money(sum(open.map(e => e.locked))); $('#l-n').textContent = L.length;
+  $('#ledgerBody').innerHTML = L.map((e, idx) => { const p = pnl(e); return `<tr style="cursor:default"><td class="mono muted" style="font-size:11px">${new Date(e.ts).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</td>
+    <td><b>${esc(e.event)}</b><div class="muted mono" style="font-size:11px">${esc(e.market)}</div></td>
+    <td><div class="legs">${e.legs.map(l => `<span class="chip"><i>${esc(l.book)}</i> ${esc(l.label)} <b>${fmtOdds(l.price)}</b> · ${money(l.stake, 0)}</span>`).join('')}</div></td>
+    <td class="mono">${money(e.total)}</td><td class="mono ${e.locked >= 0 ? 'pos' : 'neg'}">${money(e.locked)}</td>
+    <td><select data-led="${idx}" class="fg" style="background:var(--bg2);border:1px solid var(--line2);border-radius:6px;padding:4px"><option value="">open</option>${e.legs.map((l, i) => `<option value="${i}" ${e.result === i ? 'selected' : ''}>${esc(l.label)} won</option>`).join('')}<option value="void" ${e.result === 'void' ? 'selected' : ''}>void</option></select></td>
+    <td class="mono ${p == null ? 'muted' : p >= 0 ? 'pos' : 'neg'}">${p == null ? '—' : money(p)}</td></tr>`; }).join('') || '<tr><td colspan="7"><div class="empty">No bets logged. Use "Log to ledger" in the stake optimizer.</div></td></tr>';
+  $$('[data-led]').forEach(s => s.onchange = () => { const e = state.ledger[+s.dataset.led]; e.result = s.value === '' ? null : s.value === 'void' ? 'void' : +s.value; store.set('arbx.ledger', state.ledger); renderLedger(); });
+  // equity
+  const cv = $('#equity'); const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
+  cv.width = w * dpr; cv.height = h * dpr; const c = cv.getContext('2d'); c.scale(dpr, dpr);
+  const pts = [0]; settled.slice().sort((a, b) => a.ts - b.ts).forEach(e => pts.push(pts[pts.length - 1] + pnl(e)));
+  const lockEnd = pts[pts.length - 1] + sum(open.map(e => e.locked));
+  const all = [...pts, lockEnd], mn = Math.min(0, ...all), mx = Math.max(1, ...all), rg = mx - mn || 1, n = pts.length;
+  const X = i => 40 + i / Math.max(1, n) * (w - 50), Y = v => h - 20 - (v - mn) / rg * (h - 40);
+  c.strokeStyle = '#1a2331'; c.lineWidth = 1; c.fillStyle = '#7d8a9a'; c.font = '10px JetBrains Mono, monospace';
+  for (let i = 0; i <= 4; i++) { const v = mn + rg * i / 4; c.beginPath(); c.moveTo(40, Y(v)); c.lineTo(w, Y(v)); c.stroke(); c.fillText(money(v, 0), 0, Y(v) + 3); }
+  c.beginPath(); pts.forEach((v, i) => i ? c.lineTo(X(i), Y(v)) : c.moveTo(X(0), Y(v))); c.strokeStyle = '#19e68c'; c.lineWidth = 2; c.stroke();
+  if (open.length) { c.setLineDash([5, 5]); c.beginPath(); c.moveTo(X(n - 1), Y(pts[n - 1])); c.lineTo(X(n), Y(lockEnd)); c.strokeStyle = '#9b7bff'; c.stroke(); c.setLineDash([]); c.fillStyle = '#9b7bff'; c.fillText('+ locked open', X(n) - 80, Y(lockEnd) - 8); }
+}
+
+/* ============================ calculator ============================ */
+let calcLegs = [{ label: 'Team A', odds: '+155', comm: '' }, { label: 'Team B', odds: '-140', comm: '' }];
+let calcPanel;
+function renderCalc(rebuild = true) {
+  if (rebuild) {
+    $('#calcLegs').innerHTML = calcLegs.map((l, i) => `<div class="calc-leg"><input data-k="label" data-i="${i}" value="${esc(l.label)}"><input data-k="odds" data-i="${i}" value="${esc(l.odds)}"><input data-k="comm" data-i="${i}" value="${esc(l.comm)}" placeholder="0"><button class="btn sm" data-rm="${i}" ${calcLegs.length <= 2 ? 'disabled' : ''}>✕</button></div>`).join('');
+    $$('#calcLegs input').forEach(inp => inp.oninput = () => { calcLegs[+inp.dataset.i][inp.dataset.k] = inp.value; renderCalc(false); });
+    $$('#calcLegs [data-rm]').forEach(b => b.onclick = () => { calcLegs.splice(+b.dataset.rm, 1); renderCalc(); });
+  }
+  const legs = calcLegs.map((l, i) => ({ label: l.label || 'Leg ' + (i + 1), title: l.label || 'Leg ' + (i + 1), price: parseOdds(l.odds), comm: (+l.comm || 0) / 100 }));
+  calcPanel ||= new StakePanel($('#calcPanel'));
+  if (legs.every(l => l.price > 1)) calcPanel.setLegs(legs, { event: 'Manual calc', market: legs.map(l => l.label).join(' / ') });
+  else $('#calcPanel').innerHTML = '<div class="empty">Enter valid odds for every leg.</div>', calcPanel.sig = '';
+}
+function renderConv() {
+  const d = parseOdds($('#convIn').value);
+  $('#convOut').innerHTML = isFinite(d) ? [['Decimal', d.toFixed(3)], ['American', (decToAm(d) > 0 ? '+' : '') + decToAm(d)], ['Fractional', toFrac(d)], ['Implied', pct(1 / d)]].map(([l, v]) => `<div><div class="l">${l}</div><div class="v">${v}</div></div>`).join('') : '<div class="muted">Unrecognized odds</div>';
+  const arr = $('#nvIn').value.split(',').map(parseOdds);
+  if (arr.length >= 2 && arr.every(x => x > 1)) {
+    const inv = arr.map(x => 1 / x), t = sum(inv);
+    $('#nvOut').innerHTML = `<div><div class="l">Vig</div><div class="v neg">${pct(t - 1)}</div></div>` + inv.map((x, i) => `<div><div class="l">Fair #${i + 1}</div><div class="v">${fmtOdds(t / x)}</div><div class="muted mono" style="font-size:11px">${pct(x / t, 1)}</div></div>`).join('');
+  } else $('#nvOut').innerHTML = '<div class="muted">Enter 2+ odds</div>';
+}
+
+/* ============================ settings UI ============================ */
+const REGIONS = ['us', 'us2', 'uk', 'eu', 'au'], MARKETS = ['h2h', 'spreads', 'totals'];
+let sportChoices = store.get('arbx.sportlist', [{ key: 'upcoming', title: 'Upcoming (all sports)' }, { key: 'americanfootball_nfl', title: 'NFL' }, { key: 'americanfootball_ncaaf', title: 'NCAAF' }, { key: 'baseball_mlb', title: 'MLB' }, { key: 'basketball_wnba', title: 'WNBA' }, { key: 'icehockey_nhl', title: 'NHL' }, { key: 'soccer_epl', title: 'EPL' }, { key: 'soccer_uefa_champs_league', title: 'UCL' }, { key: 'mma_mixed_martial_arts', title: 'MMA' }]);
+function chipGroup(el, opts, arr, label = x => x) {
+  el.innerHTML = opts.map(o => { const k = o.key ?? o; return `<button data-k="${esc(k)}" class="${arr.includes(k) ? 'on' : ''}">${esc(o.title ?? label(o))}</button>`; }).join('');
+  el.querySelectorAll('button').forEach(b => b.onclick = () => { const k = b.dataset.k; const i = arr.indexOf(k); i >= 0 ? arr.splice(i, 1) : arr.push(k); b.classList.toggle('on'); costHint(); });
+}
+function costHint() { const n = S.regions.length * S.markets.length * Math.max(1, S.sports.length); const perDay = n * Math.round(86400 / Math.max(15, S.refreshSec)); $('#costHint').textContent = `≈ ${n} credits per scan · ${perDay.toLocaleString()} per day at ${S.refreshSec}s refresh. Only scan while you're at the screen.`; }
+function renderSettings() {
+  $('#s-key').value = S.apiKey; $('#s-refresh').value = S.refreshSec; $('#s-prematch').checked = S.prematch; $('#s-sharp').value = S.sharp; $('#s-evmin').value = S.evMin;
+  $('#s-alert').value = S.alertRoi; $('#s-sound').checked = S.sound; $('#s-round').value = String(S.rounding);
+  $('#s-comm').value = Object.entries(S.commission).map(([k, v]) => `${k}=${+(v * 100).toFixed(2)}`).join(', '); $('#s-excl').value = S.excluded.join(', ');
+  chipGroup($('#s-regions'), REGIONS, S.regions); chipGroup($('#s-markets'), MARKETS, S.markets); chipGroup($('#s-sports'), sportChoices, S.sports);
+  const seen = Object.keys(BOOKTITLE); $('#booksSeen').textContent = seen.length ? 'Seen: ' + seen.join(', ') : '';
+  costHint();
+}
+$('#s-refresh').oninput = e => { S.refreshSec = Math.max(15, +e.target.value || 90); costHint(); };
+$('#saveBtn').onclick = () => {
+  S.apiKey = $('#s-key').value.trim(); S.refreshSec = Math.max(15, +$('#s-refresh').value || 90); S.prematch = $('#s-prematch').checked; S.sharp = $('#s-sharp').value.trim() || 'pinnacle';
+  S.evMin = +$('#s-evmin').value || 0; S.alertRoi = +$('#s-alert').value || 0; S.sound = $('#s-sound').checked; S.rounding = +$('#s-round').value;
+  S.commission = {}; $('#s-comm').value.split(',').forEach(p => { const [k, v] = p.split('=').map(x => x && x.trim()); if (k && isFinite(+v)) S.commission[k] = +v / 100; });
+  S.excluded = $('#s-excl').value.split(',').map(x => x.trim()).filter(Boolean);
+  saveS(); toast('Settings saved'); if (S.sound && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+  restart();
+};
+$('#loadSports').onclick = async () => {
+  S.apiKey = $('#s-key').value.trim();
+  try { const list = await Live.sports(); sportChoices = [{ key: 'upcoming', title: 'Upcoming (all sports)' }, ...list.map(s => ({ key: s.key, title: s.title }))]; store.set('arbx.sportlist', sportChoices); chipGroup($('#s-sports'), sportChoices, S.sports); toast(list.length + ' in-season sports loaded (0 credits)'); }
+  catch (e) { toast(esc(e.message), true); }
+};
+
+/* ============================ loop / controls ============================ */
+function setStatus(txt, on = true) { $('#status').innerHTML = txt; $('#pulse').classList.toggle('off', !on); }
+async function scan() {
+  if (state.mode === 'demo') { Demo.tick(); ingest(Demo.snapshot()); setStatus(`DEMO · ${state.scans} ticks`, !state.paused); return; }
+  if (Live.busy) return; Live.busy = true; setStatus('LIVE · scanning…');
+  try { const ev = await Live.fetch(); ingest(ev); setStatus(`LIVE · ${new Date().toLocaleTimeString()} · ${Live.remaining ?? '?'} credits left`, !state.paused); }
+  catch (e) { setStatus('LIVE · error', false); toast(esc(e.message), true); }
+  finally { Live.busy = false; }
+}
+function restart() {
+  clearInterval(state.timer); state.mode = S.mode;
+  $$('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.m === S.mode));
+  if (state.paused) { setStatus('PAUSED', false); return; }
+  if (S.mode === 'demo') { state.timer = setInterval(scan, 1300); scan(); }
+  else { if (!S.apiKey) { setStatus('LIVE · no API key', false); toast('Add your The Odds API key in Settings, then press Save.', true); showView('settings'); return; } state.timer = setInterval(scan, S.refreshSec * 1000); scan(); }
+}
+function resetData() { state.track.clear(); state.prevPrices.clear(); state.tape = []; state.flow = []; state.scans = 0; state.selId = null; state.selOpp = null; $('#detail').dataset.id = ''; $('#detail').innerHTML = '<div class="empty"><div class="big">◎</div>Select an opportunity to open the stake optimizer.</div>'; }
+function showView(v) { state.view = v; $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); $$('.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + v)); if (v === 'ledger') renderLedger(); if (v === 'settings') renderSettings(); if (v === 'scanner') drawFlow(); }
+
+$('#tabs').onclick = e => { const b = e.target.closest('button'); if (b) showView(b.dataset.v); };
+$('#modeSeg').onclick = e => { const b = e.target.closest('button'); if (!b || b.dataset.m === S.mode) return; S.mode = b.dataset.m; saveS(); resetData(); if (S.mode === 'demo') Demo.init(); restart(); };
+$('#fmtSeg').onclick = e => { const b = e.target.closest('button'); if (!b) return; S.format = b.dataset.f; saveS(); $$('#fmtSeg button').forEach(x => x.classList.toggle('on', x === b)); $('#detail').dataset.id = ''; renderScanner(); renderCalc(); renderConv(); };
+$('#bankroll').oninput = e => { S.bankroll = Math.max(1, +e.target.value || 1000); saveS(); renderScanner(); };
+$('#pauseBtn').onclick = () => { state.paused = !state.paused; $('#pauseBtn').textContent = state.paused ? 'Resume' : 'Pause'; restart(); };
+$('#scanBtn').onclick = () => { if (audioCtx == null && S.sound) try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {} scan(); };
+$('#subtabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; state.tab = b.dataset.t; $$('#subtabs button').forEach(x => x.classList.toggle('on', x === b)); renderScanner(); };
+['#minRoi', '#q', '#sportF'].forEach(s => $(s).addEventListener('input', renderScanner));
+function select(id) { state.selId = id; state.selOpp = findOpp(id); $('#detail').dataset.id = ''; renderScanner(); if (innerWidth < 980) $('#detail').scrollIntoView({ behavior: 'smooth' }); }
+$('#tbody').onclick = e => { const tr = e.target.closest('tr[data-id]'); if (tr) select(tr.dataset.id); };
+$('#heat').onclick = e => { const d = e.target.closest('[data-id]'); if (!d) return; const id = d.dataset.id; if (state.res.arbs.some(a => a.id === id)) { state.tab = 'arb'; $$('#subtabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'arb')); select(id); } else { const ev = state.res.evs.find(x => x.id.startsWith(id + '|')); if (ev) { state.tab = 'ev'; $$('#subtabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'ev')); select(ev.id); } else toast(esc(d.title)); } };
+$('#c2').onclick = () => { calcLegs = [{ label: 'Team A', odds: '+155', comm: '' }, { label: 'Team B', odds: '-140', comm: '' }]; renderCalc(); };
+$('#c3').onclick = () => { calcLegs = [{ label: 'Home', odds: '2.75', comm: '' }, { label: 'Draw', odds: '3.60', comm: '' }, { label: 'Away', odds: '3.10', comm: '' }]; renderCalc(); };
+$('#cAdd').onclick = () => { if (calcLegs.length < 8) calcLegs.push({ label: 'Leg ' + (calcLegs.length + 1), odds: '', comm: '' }); renderCalc(); };
+$('#convIn').oninput = renderConv; $('#nvIn').oninput = renderConv;
+$('#csvBtn').onclick = () => {
+  const rows = [['logged', 'event', 'market', 'book', 'outcome', 'decimal', 'stake', 'total', 'locked', 'result']];
+  state.ledger.forEach(e => e.legs.forEach((l, i) => rows.push([new Date(e.ts).toISOString(), e.event, e.market, l.book, l.label, l.price, l.stake.toFixed(2), e.total.toFixed(2), e.locked.toFixed(2), e.result == null ? 'open' : e.result === 'void' ? 'void' : e.result === i ? 'won' : 'lost'])));
+  const blob = new Blob([rows.map(r => r.map(x => `"${String(x).replace(/"/g, '""')}"`).join(',')).join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'arbx-ledger.csv'; a.click(); URL.revokeObjectURL(a.href);
+};
+$('#clrBtn').onclick = () => { if (confirm('Clear every logged bet?')) { state.ledger = []; store.set('arbx.ledger', []); renderLedger(); } };
+setInterval(() => { const now = Date.now(); $$('.age[data-first]').forEach(el => el.textContent = ago(now - +el.dataset.first)); }, 1000);
+addEventListener('resize', () => { drawFlow(); if (state.view === 'ledger') renderLedger(); });
+document.addEventListener('keydown', e => { if (e.target.matches('input,select,textarea')) return; if (e.key === ' ') { e.preventDefault(); $('#pauseBtn').click(); } if (e.key === 'r') scan(); if (['1', '2', '3'].includes(e.key)) $$('#subtabs button')[+e.key - 1].click(); });
+
+/* boot */
+$('#bankroll').value = S.bankroll;
+$$('#fmtSeg button').forEach(b => b.classList.toggle('on', b.dataset.f === S.format));
+Demo.init(); renderCalc(); renderConv(); renderLedger(); restart();
+</script>
+</body>
+</html>

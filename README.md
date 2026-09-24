@@ -1,2 +1,11 @@
 # Portfolio_studio
 design and logo creation website 
+
+## ARBX: sportsbook arbitrage terminal
+
+`arbitrage/index.html` is a self-contained app (no build step; open it in a browser):
+
+- **Scanner**: finds arbitrage (2-way, 3-way, spreads, totals), middles, and +EV bets priced against a sharp no-vig line.
+- **Stake optimizer**: equal-profit stakes, a risk-free bias slider, anchor-a-leg for max-bet limits, and round-number stakes chosen by best worst-case ROI.
+- **DEMO** mode runs a simulated 14-book market. **LIVE** mode pulls real odds from [The Odds API](https://the-odds-api.com). Add your key under Settings; it is stored only in your browser.
+- Also includes a calculator, odds converter, no-vig tool, bet ledger with equity curve and CSV export, and a guide.
