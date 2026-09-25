@@ -188,6 +188,19 @@ canvas#equity{width:100%;height:220px;display:block}
 .guide .f{display:block;padding:10px 14px;margin:8px 0}
 .guide ul{padding-left:20px} .guide li{margin:4px 0}
 .warn{border:1px solid rgba(255,176,32,.35);background:rgba(255,176,32,.06);border-radius:12px;padding:12px 14px;color:#e8d3a8;margin:14px 0}
+.wamt{width:80px;background:var(--bg2);border:1px solid var(--line2);border-radius:6px;padding:5px 7px;font-family:var(--mono);outline:0}
+.wamt:focus{border-color:var(--green)}
+.wb{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.wwarn{font-family:var(--mono);font-size:11px;margin:8px 0 0;padding:7px 10px;border-radius:8px}
+.wwarn.cap{background:rgba(255,176,32,.08);color:var(--amber);border:1px solid rgba(255,176,32,.3)}
+.wwarn.short{background:rgba(255,77,109,.08);color:var(--red);border:1px solid rgba(255,77,109,.3)}
+.mv{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg2);border:1px solid var(--line);border-radius:10px;margin-bottom:6px;font-size:13px}
+.mv b{font-family:var(--mono)}
+.al{display:grid;grid-template-columns:100px 1fr 70px;gap:8px;align-items:center;font-size:12px;margin-bottom:7px}
+.al .bar{position:relative;height:12px;background:var(--bg2);border-radius:3px}
+.al .bar i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--green2),var(--green));border-radius:3px}
+.al .bar u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text)}
+.al .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #toast{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:100}
 #toast div{background:var(--panel2);border:1px solid var(--green);border-radius:10px;padding:10px 14px;font-size:13px;box-shadow:0 10px 30px -10px rgba(25,230,140,.5);animation:slide .3s;max-width:340px}
 #toast div.err{border-color:var(--red);box-shadow:0 10px 30px -10px rgba(255,77,109,.5)}
@@ -208,6 +221,7 @@ canvas#equity{width:100%;height:220px;display:block}
   <div class="brand"><span class="pulse" id="pulse"></span>ARB<b>//</b>X <small>arbitrage terminal</small></div>
   <nav class="tabs" id="tabs">
     <button data-v="scanner" class="on">Scanner</button>
+    <button data-v="books">Books</button>
     <button data-v="calc">Calculator</button>
     <button data-v="ledger">Ledger</button>
     <button data-v="settings">Settings</button>
@@ -249,6 +263,7 @@ canvas#equity{width:100%;height:220px;display:block}
           <label class="field"><span>MIN %</span><input id="minRoi" type="number" step="0.1" value="0"></label>
           <label class="field"><span>SPORT</span><select id="sportF"><option value="">All</option></select></label>
           <label class="field q"><span>⌕</span><input id="q" placeholder="team / book"></label>
+          <label class="field" id="fundedWrap" style="display:none;cursor:pointer"><input id="fundedOnly" type="checkbox" style="width:auto;accent-color:var(--green)"><span>FUNDED ONLY</span></label>
         </div>
       </div>
       <div class="tablewrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
@@ -266,6 +281,38 @@ canvas#equity{width:100%;height:220px;display:block}
   </div>
 
   <div class="panel"><h3>Graveyard · closed arbs <span class="muted mono" style="letter-spacing:0">windows close fast; this is how fast</span></h3><div class="grave" id="grave"><div class="muted">No closed arbs yet.</div></div></div>
+</section>
+
+<!-- BOOKS / BALANCES -->
+<section class="view" id="v-books">
+  <div class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr))">
+    <div class="kpi"><div class="l">Total across books</div><div class="v" id="w-total">$0</div><div class="s" id="w-total-s">&nbsp;</div></div>
+    <div class="kpi"><div class="l">Tied up in open bets</div><div class="v amb" id="w-open">$0</div><div class="s" id="w-open-s">&nbsp;</div></div>
+    <div class="kpi"><div class="l">Max arb you can fund</div><div class="v pos" id="w-max">—</div><div class="s">2-way, your two richest books</div></div>
+    <div class="kpi"><div class="l">Off-target</div><div class="v" id="w-off">$0</div><div class="s">money sitting in the wrong books</div></div>
+  </div>
+  <div class="grid">
+    <div class="panel">
+      <h3>Book balances</h3>
+      <div class="row" style="margin-bottom:12px">
+        <label class="field"><span>ADD</span><select id="addBookSel"></select></label>
+        <label class="field"><span>OR NAME</span><input id="addBookName" placeholder="custom book" style="width:120px"></label>
+        <label class="field"><span>START $</span><input id="addBookAmt" type="number" min="0" step="50" value="0" style="width:80px"></label>
+        <button class="btn pri sm" id="addBookBtn">+ Add book</button>
+        <button class="btn sm" id="addTopBtn" title="Adds the books that most often post the best price">+ Top edge books</button>
+      </div>
+      <div class="tablewrap" style="max-height:none"><table><thead><tr><th>Book</th><th>Balance</th><th>In open bets</th><th>Target</th><th>Move money</th><th></th></tr></thead><tbody id="walletBody"></tbody></table></div>
+      <div class="muted" style="font-size:12px;margin-top:10px">ARBX never touches your money. These are <b>your records</b> of what sits in each sportsbook account. Logging a bet in the stake optimizer takes the stakes out of the right books, and settling it in the Ledger pays the winnings back in.</div>
+    </div>
+    <aside class="panel">
+      <h3>Rebalance plan <label class="field"><span>TARGET</span><select id="targetMode"><option value="equal">equal split</option><option value="edge">by edge frequency</option></select></label></h3>
+      <div id="rebalance"></div>
+      <h3 style="margin-top:18px">Allocation</h3>
+      <div id="alloc"></div>
+      <h3 style="margin-top:18px">Activity</h3>
+      <div id="wlog" class="mono" style="font-size:11px;max-height:300px;overflow:auto"></div>
+    </aside>
+  </div>
 </section>
 
 <!-- CALCULATOR -->
@@ -341,6 +388,13 @@ canvas#equity{width:100%;height:220px;display:block}
       <li><b>Bias slider:</b> moves profit onto one outcome while the others break even, so you ride the side you like and risk nothing.</li>
       <li><b>Anchor a leg:</b> type a stake into any leg (e.g. the book's max bet) and the other legs are sized to match it.</li>
       <li><b>Rounding:</b> searches every floor/ceil combination for the best guaranteed ROI with round-number stakes.</li>
+    </ul>
+    <h2>Funding your books</h2>
+    <p>ARBX never holds, moves or bets money. You fund each sportsbook account directly (bank transfer, debit card, PayPal and so on) and place every bet yourself on the book's own site. Arbs close in seconds, so both books need money in them <i>before</i> the arb appears.</p>
+    <ul>
+      <li>Record what's in each account on the <b>Books</b> tab. The scanner then works out how much of each arb you can actually fund, and the stake optimizer caps each leg at that book's balance.</li>
+      <li>Logging a bet takes the stakes out of those books. Settling it in the Ledger pays the winnings back into the book that won, or refunds every leg on a void.</li>
+      <li>Winnings pile up in some books and drain others. The rebalance plan tells you which to withdraw from and which to top up. Books can't transfer to each other, so each move is a withdrawal to your bank and then a deposit, and withdrawals can take days.</li>
     </ul>
     <h2>Workflow that actually banks</h2>
     <ul>
@@ -583,7 +637,7 @@ function analyze(events) {
     const groups = groupEvent(ev);
     for (const g of groups) {
       cells.push({ id: g.gid, ev, label: g.label, sum: g.sum });
-      if (g.sum < 1) arbs.push({ id: g.gid, type: 'arb', ev, group: g, legs: g.best, sum: g.sum, roi: 1 / g.sum - 1, market: g.label });
+      if (g.sum < 1 && new Set(g.best.map(b => b.book)).size > 1) arbs.push({ id: g.gid, type: 'arb', ev, group: g, legs: g.best, sum: g.sum, roi: 1 / g.sum - 1, market: g.label });
       const fp = fairProbs(g);
       if (fp) g.names.forEach((n, i) => {
         const p = fp.p[i];
@@ -634,6 +688,50 @@ function analyze(events) {
 }
 const BOOKTITLE = {};
 
+/* ============================ book balances ============================ */
+// A record of what sits in each sportsbook account. Nothing here moves real money.
+const W = { books: store.get('arbx.wallets', {}), log: store.get('arbx.wlog', []), tally: store.get('arbx.tally', {}), target: store.get('arbx.target', 'equal') };
+const saveW = () => { W.log = W.log.slice(0, 300); store.set('arbx.wallets', W.books); store.set('arbx.wlog', W.log); store.set('arbx.tally', W.tally); };
+const walletOn = () => Object.keys(W.books).length > 0;
+const bal = key => W.books[key] ? W.books[key].balance : null;
+const r2 = x => Math.round(x * 100) / 100;
+function wMove(key, amt, note) {
+  const b = W.books[key]; if (!b || !amt) return false;
+  b.balance = r2(b.balance + amt); W.log.unshift({ t: Date.now(), key, title: b.title, amt: r2(amt), note, bal: b.balance }); return true;
+}
+// biggest total stake an arb can take given book balances (untracked book = can't fund)
+function fundable(legs) {
+  if (!walletOn()) return Infinity;
+  const inv = legs.map(l => 1 / l.eff), s = sum(inv), share = {};
+  legs.forEach((l, i) => share[l.book] = (share[l.book] || 0) + inv[i] / s);
+  return Math.min(...Object.entries(share).map(([k, sh]) => { const b = bal(k); return b == null ? 0 : Math.max(0, b) / sh; }));
+}
+function openByBook() {
+  const m = {};
+  for (const e of state.ledger) if (e.result == null && e.debited) e.legs.forEach(l => { if (l.key) m[l.key] = (m[l.key] || 0) + l.stake; });
+  return m;
+}
+function targets() {
+  const keys = Object.keys(W.books), total = sum(keys.map(k => Math.max(0, W.books[k].balance)));
+  const w = keys.map(k => W.target === 'edge' ? 1 + (W.tally[k]?.n || 0) : 1), ws = sum(w) || 1;
+  return Object.fromEntries(keys.map((k, i) => [k, total * w[i] / ws]));
+}
+function rebalancePlan() {
+  const T = targets(), total = sum(Object.keys(W.books).map(k => Math.max(0, W.books[k].balance)));
+  const min = Math.max(25, total * .02);
+  const give = [], take = [];
+  for (const k in W.books) { const d = W.books[k].balance - T[k]; if (d > min) give.push([k, d]); else if (d < -min) take.push([k, -d]); }
+  give.sort((a, b) => b[1] - a[1]); take.sort((a, b) => b[1] - a[1]);
+  const moves = [];
+  while (give.length && take.length) {
+    const g = give[0], t = take[0], m = Math.min(g[1], t[1]), amt = Math.floor(m / 5) * 5;
+    if (amt >= min) moves.push({ from: g[0], to: t[0], amt });
+    g[1] -= m; t[1] -= m;
+    if (g[1] < min) give.shift(); if (t[1] < min) take.shift();
+  }
+  return moves;
+}
+
 /* ============================ app state ============================ */
 const state = {
   tab: 'arb', view: 'scanner', res: { arbs: [], mids: [], evs: [], cells: [], books: 0 }, events: [],
@@ -674,7 +772,10 @@ function ingest(events) {
     live.add(o.id);
     let t = state.track.get(o.id);
     const score = o.type === 'arb' ? o.roi : o.type === 'mid' ? o.evp : o.edge;
-    if (!t) { t = { first: now, hist: [], peak: score, fresh: true }; state.track.set(o.id, t); if (o.type === 'arb' && o.roi * 100 >= S.alertRoi && state.scans > 1) alerts.push(o); }
+    if (!t) {
+      t = { first: now, hist: [], peak: score, fresh: true }; state.track.set(o.id, t);
+      if (o.type === 'arb') { o.legs.forEach(l => { const x = W.tally[l.book] ||= { title: l.title, n: 0 }; x.n++; }); if (o.roi * 100 >= S.alertRoi && state.scans > 1) alerts.push(o); }
+    }
     else t.fresh = false;
     t.hist.push(score); if (t.hist.length > 40) t.hist.shift(); t.peak = Math.max(t.peak, score); t.last = o;
   }
@@ -682,7 +783,7 @@ function ingest(events) {
     if (t.last && t.last.type === 'arb') state.grave.unshift({ ev: `${t.last.ev.away_team} @ ${t.last.ev.home_team}`, sport: t.last.ev.sport_title, market: t.last.market, peak: t.peak, life: now - t.first, closed: now, books: t.last.legs.map(l => l.title).join(' · ') });
     state.track.delete(id);
   }
-  state.grave = state.grave.slice(0, 200); store.set('arbx.grave', state.grave);
+  state.grave = state.grave.slice(0, 200); store.set('arbx.grave', state.grave); store.set('arbx.tally', W.tally);
   state.flow.push(res.arbs.length); if (state.flow.length > 120) state.flow.shift();
   if (alerts.length) {
     ping(); const a = alerts[0];
@@ -694,7 +795,7 @@ function ingest(events) {
 
 /* ============================ stake panel ============================ */
 class StakePanel {
-  constructor(root, opts = {}) { this.root = root; this.opts = opts; this.cfg = { total: S.bankroll, round: S.rounding, biasIdx: -1, bias: 0, maxLeg: 0, anchor: null }; this.legs = []; this.sig = ''; }
+  constructor(root, opts = {}) { this.root = root; this.opts = opts; this.cfg = { total: S.bankroll, round: S.rounding, biasIdx: -1, bias: 0, maxLeg: 0, anchor: null, capBal: true }; this.legs = []; this.sig = ''; }
   setLegs(legs, meta) {
     const sig = legs.map(l => (l.book || '') + '§' + l.label).join('|');
     this.legs = legs.map(l => ({ ...l, eff: 1 + (l.price - 1) * (1 - (l.comm ?? S.commission[l.book] ?? 0)) }));
@@ -711,22 +812,25 @@ class StakePanel {
         <label class="field"><span>ROUND</span><select data-c="round">${[[.01, 'cents'], [1, '$1'], [5, '$5'], [10, '$10'], [25, '$25']].map(([v, n]) => `<option value="${v}" ${+this.cfg.round === v ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <label class="field"><span>MAX/LEG $</span><input data-c="maxLeg" type="number" min="0" step="10" placeholder="none" value="${this.cfg.maxLeg || ''}"></label>
         <label class="field"><span>BIAS →</span><select data-c="biasIdx"><option value="-1">equal profit</option>${L.map((l, i) => `<option value="${i}">${esc(l.label)}</option>`).join('')}</select></label>
+        ${walletOn() && L.some(l => bal(l.book) != null) ? `<label class="bias mono muted" style="font-size:11px;cursor:pointer"><input data-c="capBal" type="checkbox" ${this.cfg.capBal ? 'checked' : ''} style="accent-color:var(--green)"> CAP EACH LEG AT ITS BOOK BALANCE</label>` : ''}
         <div class="bias"><span class="mono muted" style="font-size:11px">RISK-FREE LEAN</span><input data-c="bias" type="range" min="0" max="100" value="0"><span class="mono bv" style="font-size:11px;width:34px">0%</span></div>
       </div>
       <table class="legtbl"><thead><tr><th>Book / outcome</th><th>Odds</th><th>Impl.</th><th>Stake</th><th>If wins</th></tr></thead><tbody>
-      ${L.map((l, i) => `<tr data-i="${i}"><td><div class="book">${esc(l.title || l.book || 'Leg ' + (i + 1))}</div><div class="muted" style="font-size:12px">${esc(l.label)}</div></td>
+      ${L.map((l, i) => `<tr data-i="${i}"><td><div class="book">${esc(l.title || l.book || 'Leg ' + (i + 1))}</div><div class="muted" style="font-size:12px">${esc(l.label)}</div><div class="wb"></div></td>
         <td class="mono o"></td><td class="mono muted imp"></td><td><input data-stake="${i}" type="number" min="0" step="1"></td><td class="mono pl"></td></tr>`).join('')}
       </tbody></table>
+      <div class="wwarn" style="display:none"></div>
       <div class="sum"><div><div class="l">Total staked</div><div class="v tot"></div></div><div><div class="l">Guaranteed</div><div class="v mn"></div></div><div><div class="l">Worst-case ROI</div><div class="v roi2"></div></div></div>
       <div class="row"><button class="btn sm cp">Copy bet slip</button><button class="btn sm pri lg">Log to ledger</button><button class="btn sm rs">Reset</button></div>`;
     const r = this.root;
     r.querySelector('[data-c=total]').oninput = e => { this.cfg.total = Math.max(0, +e.target.value || 0); this.cfg.anchor = null; this.update(); };
     r.querySelector('[data-c=round]').onchange = e => { this.cfg.round = +e.target.value; this.update(); };
     r.querySelector('[data-c=maxLeg]').oninput = e => { this.cfg.maxLeg = +e.target.value || 0; this.update(); };
+    const cb = r.querySelector('[data-c=capBal]'); if (cb) cb.onchange = e => { this.cfg.capBal = e.target.checked; this.update(); };
     r.querySelector('[data-c=biasIdx]').onchange = e => { this.cfg.biasIdx = +e.target.value; if (this.cfg.biasIdx >= 0 && !this.cfg.bias) { this.cfg.bias = .5; r.querySelector('[data-c=bias]').value = 50; } this.cfg.anchor = null; this.update(); };
     r.querySelector('[data-c=bias]').oninput = e => { this.cfg.bias = +e.target.value / 100; if (this.cfg.biasIdx < 0 && this.cfg.bias > 0) { this.cfg.biasIdx = 0; r.querySelector('[data-c=biasIdx]').value = 0; } this.cfg.anchor = null; this.update(); };
     r.querySelectorAll('[data-stake]').forEach(inp => inp.oninput = e => { const v = +e.target.value; if (v > 0) { this.cfg.anchor = { i: +inp.dataset.stake, amt: v }; this.update(); } });
-    r.querySelector('.rs').onclick = () => { this.cfg = { total: S.bankroll, round: S.rounding, biasIdx: -1, bias: 0, maxLeg: 0, anchor: null }; this.build(); this.update(); };
+    r.querySelector('.rs').onclick = () => { this.cfg = { total: S.bankroll, round: S.rounding, biasIdx: -1, bias: 0, maxLeg: 0, anchor: null, capBal: true }; this.build(); this.update(); };
     r.querySelector('.cp').onclick = () => { const txt = this.slip(); navigator.clipboard?.writeText(txt).then(() => toast('Bet slip copied'), () => toast('Clipboard blocked', true)); };
     r.querySelector('.lg').onclick = () => { const c = this.compute(); if (!c || !c.tot) return; logBet(this.meta, this.legs, c); };
   }
@@ -743,12 +847,24 @@ class StakePanel {
       }
     }
     if (c.maxLeg > 0) { const mx = Math.max(...st); if (mx > c.maxLeg) { const f = c.maxLeg / mx; st = st.map(s => s * f); } }
+    // book balances: scale the whole position down so no leg needs more than its book holds
+    // several legs can sit on the same book, so compare each book's balance with everything it needs
+    let capped = null; const room = L.map(l => walletOn() ? bal(l.book) : null);
+    const need = s => { const m = {}; L.forEach((l, i) => { if (room[i] != null) m[l.book] = (m[l.book] || 0) + s[i]; }); return m; };
+    const firstLeg = k => L.findIndex(l => l.book === k);
+    if (c.capBal) {
+      let f = 1; for (const [k, n] of Object.entries(need(st))) { const g = n > 0 ? Math.max(0, bal(k)) / n : 1; if (g < f) { f = g; capped = firstLeg(k); } }
+      if (f < 1) st = st.map(s => s * f);
+    }
     const r = c.round;
     if (r >= 1) st = (c.anchor || c.bias > 0) ? st.map((s, i) => c.anchor && i === c.anchor.i ? s : Math.max(r, Math.round(s / r) * r)) : optimizeRound(st, L, r);
     else st = st.map(s => Math.round(s * 100) / 100);
+    const unit = Math.max(r, .01);
+    if (c.capBal) for (const [k, n] of Object.entries(need(st))) { const b = Math.max(0, bal(k)); if (n > b + 1e-9) { const f = b / n; st = st.map((s, i) => L[i].book === k && room[i] != null ? Math.floor(s * f / unit) * unit : s); } }
+    const nd = need(st), short = L.map((l, i) => room[i] != null && firstLeg(l.book) === i && nd[l.book] > bal(l.book) + 1e-9 ? nd[l.book] - bal(l.book) : 0);
     const tot = sum(st), rows = L.map((l, i) => { const ret = st[i] * l.eff; return { stake: st[i], ret, pl: ret - tot }; });
     const pls = rows.map(x => x.pl);
-    return { st, tot, rows, min: Math.min(...pls), max: Math.max(...pls), Ssum, roi: tot ? Math.min(...pls) / tot : 0 };
+    return { st, tot, rows, min: Math.min(...pls), max: Math.max(...pls), Ssum, roi: tot ? Math.min(...pls) / tot : 0, room, capped, short };
   }
   update() {
     const c = this.compute(), r = this.root; if (!c) return;
@@ -763,8 +879,15 @@ class StakePanel {
       tr.querySelector('.o').innerHTML = `${fmtOdds(l.price)}${l.eff < l.price - 1e-9 ? `<div class="muted" style="font-size:10px">net ${l.eff.toFixed(3)}</div>` : ''}`;
       tr.querySelector('.imp').textContent = pct(1 / l.eff, 1);
       const inp = tr.querySelector('input'); if (document.activeElement !== inp) inp.value = row.stake.toFixed(c.st[i] % 1 ? 2 : 0);
+      const wb = tr.querySelector('.wb'), b = c.room[i];
+      wb.textContent = b == null ? (walletOn() && l.book ? 'not tracked in Books' : '') : `in book ${money(b)}`;
+      wb.style.color = b != null && row.stake > b + 1e-9 ? 'var(--red)' : b != null && row.stake > b * .8 ? 'var(--amber)' : '';
       tr.querySelector('.pl').innerHTML = `${money(row.ret)}<div class="${row.pl >= 0 ? 'pos' : 'neg'}" style="font-size:11px">${row.pl >= 0 ? '+' : ''}${money(row.pl)}</div>`;
     });
+    const ww = r.querySelector('.wwarn'), sh = c.short.findIndex(x => x > 0);
+    if (sh >= 0) { ww.style.display = ''; ww.className = 'wwarn short'; ww.textContent = `Short ${money(c.short[sh])} at ${L[sh].title}. Deposit first or lower the stake.`; }
+    else if (c.capped != null) { ww.style.display = ''; ww.className = 'wwarn cap'; ww.textContent = `Capped by ${L[c.capped].title} balance (${money(c.room[c.capped])}). Top it up to take the full ${money(this.cfg.total, 0)}.`; }
+    else ww.style.display = 'none';
     r.querySelector('.tot').textContent = money(c.tot);
     const mn = r.querySelector('.mn'); mn.textContent = (c.min >= 0 ? '+' : '') + money(c.min); mn.className = 'v mn ' + (c.min >= 0 ? 'pos' : 'neg');
     const ro = r.querySelector('.roi2'); ro.textContent = pct(c.roi); ro.className = 'v roi2 ' + (c.roi >= 0 ? 'pos' : 'neg');
@@ -806,7 +929,8 @@ const legChips = legs => `<div class="legs">${legs.map(l => `<span class="chip">
 
 function filtered() {
   const { arbs, mids, evs } = state.res; const q = $('#q').value.trim().toLowerCase(), sp = $('#sportF').value, min = +$('#minRoi').value || 0;
-  const ok = o => (!sp || o.ev.sport_title === sp) && (!q || `${o.ev.home_team} ${o.ev.away_team} ${(o.legs || [o.leg]).map(l => l.title).join(' ')}`.toLowerCase().includes(q));
+  const fo = walletOn() && $('#fundedOnly').checked;
+  const ok = o => (!fo || fundable(o.legs || [o.leg]) >= 10) && (!sp || o.ev.sport_title === sp) && (!q || `${o.ev.home_team} ${o.ev.away_team} ${(o.legs || [o.leg]).map(l => l.title).join(' ')}`.toLowerCase().includes(q));
   return { arb: arbs.filter(o => ok(o) && o.roi * 100 >= min), mid: mids.filter(ok), ev: evs.filter(ok) };
 }
 
@@ -818,7 +942,9 @@ function renderScanner() {
   $('#k-arbs .s').textContent = res.arbs.filter(a => a.roi >= .02).length + ' above 2%';
   $('#k-best').textContent = best ? pct(best.roi) : '—';
   $('#k-best-s').textContent = best ? `${best.ev.home_team.split(' ').pop()} · ${best.market}` : ' ';
-  $('#k-table').textContent = money(sum(res.arbs.map(a => a.roi * S.bankroll)), 0);
+  $('#k-table').textContent = money(sum(res.arbs.map(a => a.roi * Math.min(S.bankroll, fundable(a.legs)))), 0);
+  $('#k-table').nextElementSibling.textContent = walletOn() ? 'fundable from your book balances' : 'at your bankroll / arb';
+  $('#fundedWrap').style.display = walletOn() ? '' : 'none';
   $('#k-mid').textContent = res.mids.length; $('#k-ev').textContent = res.evs.length;
   $('#k-ev-s').textContent = res.evs[0] ? 'top edge ' + pct(res.evs[0].edge, 1) : 'vs sharp line';
   $('#k-mk').textContent = res.cells.length; $('#k-mk-s').textContent = `${res.books} books · ${state.events.length} events · ${res.ms.toFixed(1)}ms`;
@@ -838,13 +964,18 @@ function renderScanner() {
   else tb.innerHTML = rows.slice(0, 150).map(o => {
     const t = state.track.get(o.id) || { first: now, hist: [] }; const cls = (o.id === state.selId ? 'sel ' : '') + (t.fresh ? 'fresh' : '');
     const age = `<span class="age" data-first="${t.first}">${ago(now - t.first)}</span>`;
-    if (o.type === 'arb') return `<tr class="${cls}" data-id="${esc(o.id)}"><td><span class="roi ${o.roi >= .02 ? 'big' : ''}">${pct(o.roi)}</span></td><td>${evCell(o.ev)}</td><td class="mono" style="font-size:12px">${esc(o.market)}</td><td>${legChips(o.legs)}</td><td class="mono pos">+${money(o.roi * S.bankroll)}</td><td>${age}</td><td>${spark(t.hist)}</td></tr>`;
+    if (o.type === 'arb') return `<tr class="${cls}" data-id="${esc(o.id)}"><td><span class="roi ${o.roi >= .02 ? 'big' : ''}">${pct(o.roi)}</span></td><td>${evCell(o.ev)}</td><td class="mono" style="font-size:12px">${esc(o.market)}</td><td>${legChips(o.legs)}</td><td class="mono">${profitCell(o)}</td><td>${age}</td><td>${spark(t.hist)}</td></tr>`;
     if (o.type === 'mid') return `<tr class="${cls}" data-id="${esc(o.id)}"><td><span class="roi" style="color:${o.evp > 0 ? 'var(--green)' : 'var(--amber)'}">${pct(o.evp)}</span></td><td>${evCell(o.ev)}</td><td class="mono" style="font-size:12px;white-space:nowrap">${esc(o.market)}<div class="muted">${o.width} pt${o.width === 1 ? '' : 's'} wide</div></td><td>${legChips(o.legs)}</td><td class="mono">${pct(o.hit, 1)}</td><td class="mono ${o.single >= 0 ? 'pos' : 'neg'}">${pct(o.single)}</td><td>${age}</td></tr>`;
     return `<tr class="${cls}" data-id="${esc(o.id)}"><td><span class="roi" style="color:var(--violet)">${pct(o.edge)}</span></td><td>${evCell(o.ev)}</td><td style="font-size:12px"><b>${esc(o.leg.label)}</b><div class="muted mono">${esc(o.market)}</div></td><td class="mono">${esc(o.leg.title)} <b>${fmtOdds(o.leg.price)}</b></td><td class="mono muted">${fmtOdds(o.fair)}</td><td class="mono pos">${money(Math.max(0, o.kelly / 4 * S.bankroll))}</td><td>${age}</td></tr>`;
   }).join('');
   renderDetail(); renderHeat(); renderBooks(); renderTape(); renderGrave(); drawFlow();
 }
 
+function profitCell(o) {
+  const F = fundable(o.legs), T = Math.min(S.bankroll, F);
+  if (T < 10) return `<span class="chip" style="color:var(--dim)">unfunded</span><div class="wb">${esc(o.legs.filter(l => !(bal(l.book) > 0)).map(l => l.title).join(', '))}</div>`;
+  return `<span class="pos">+${money(o.roi * T)}</span>${T < S.bankroll ? `<div class="wb" style="color:var(--amber)">capped at ${money(T, 0)}</div>` : ''}`;
+}
 function findOpp(id) { const r = state.res; return r.arbs.find(o => o.id === id) || r.mids.find(o => o.id === id) || r.evs.find(o => o.id === id); }
 let detailPanel = null;
 function renderDetail() {
@@ -931,8 +1062,27 @@ function drawFlow() {
 
 /* ============================ ledger ============================ */
 function logBet(meta, legs, c) {
-  state.ledger.unshift({ id: Date.now().toString(36), ts: Date.now(), event: meta?.event || 'Manual calc', market: meta?.market || '', legs: legs.map((l, i) => ({ book: l.title || l.book || 'Leg ' + (i + 1), label: l.label, price: l.price, eff: l.eff, stake: c.st[i] })), total: c.tot, locked: c.min, result: null });
-  store.set('arbx.ledger', state.ledger); toast(`Logged ${money(c.tot)} · locked ${money(c.min)}`); renderLedger();
+  state.ledger.unshift({ id: Date.now().toString(36), ts: Date.now(), event: meta?.event || 'Manual calc', market: meta?.market || '', legs: legs.map((l, i) => ({ key: W.books[l.book] ? l.book : null, book: l.title || l.book || 'Leg ' + (i + 1), label: l.label, price: l.price, eff: l.eff, stake: c.st[i] })), total: c.tot, locked: c.min, result: null });
+  const e = state.ledger[0];
+  if (e.legs.some(l => l.key)) {
+    e.debited = true; e.credits = [];
+    e.legs.forEach(l => { if (l.key) wMove(l.key, -l.stake, `Bet · ${l.label}`); });
+    const neg = e.legs.filter(l => l.key && bal(l.key) < 0); saveW();
+    if (neg.length) toast(`${esc(neg.map(l => l.book).join(', '))} balance went negative. Record a deposit on the Books tab.`, true);
+  }
+  store.set('arbx.ledger', state.ledger); toast(`Logged ${money(c.tot)} · locked ${money(c.min)}`); renderLedger(); if (state.view === 'scanner') renderScanner();
+}
+// pay winnings (or void refunds) back into the books; re-settling reverses the previous payout first
+function settle(e, result) {
+  if (e.debited) {
+    (e.credits || []).forEach(c => wMove(c.key, -c.amt, 'Settlement reversed · ' + e.event));
+    e.credits = [];
+    const pay = (l, amt, note) => { if (l.key && W.books[l.key]) { wMove(l.key, amt, note); e.credits.push({ key: l.key, amt }); } };
+    if (result === 'void') e.legs.forEach(l => pay(l, l.stake, 'Void refund · ' + l.label));
+    else if (result != null) { const l = e.legs[result]; pay(l, r2(l.stake * l.eff), 'Won · ' + l.label); }
+    saveW();
+  }
+  e.result = result; store.set('arbx.ledger', state.ledger); renderLedger();
 }
 function renderLedger() {
   const L = state.ledger;
@@ -947,7 +1097,7 @@ function renderLedger() {
     <td class="mono">${money(e.total)}</td><td class="mono ${e.locked >= 0 ? 'pos' : 'neg'}">${money(e.locked)}</td>
     <td><select data-led="${idx}" class="fg" style="background:var(--bg2);border:1px solid var(--line2);border-radius:6px;padding:4px"><option value="">open</option>${e.legs.map((l, i) => `<option value="${i}" ${e.result === i ? 'selected' : ''}>${esc(l.label)} won</option>`).join('')}<option value="void" ${e.result === 'void' ? 'selected' : ''}>void</option></select></td>
     <td class="mono ${p == null ? 'muted' : p >= 0 ? 'pos' : 'neg'}">${p == null ? '—' : money(p)}</td></tr>`; }).join('') || '<tr><td colspan="7"><div class="empty">No bets logged. Use "Log to ledger" in the stake optimizer.</div></td></tr>';
-  $$('[data-led]').forEach(s => s.onchange = () => { const e = state.ledger[+s.dataset.led]; e.result = s.value === '' ? null : s.value === 'void' ? 'void' : +s.value; store.set('arbx.ledger', state.ledger); renderLedger(); });
+  $$('[data-led]').forEach(s => s.onchange = () => { const e = state.ledger[+s.dataset.led]; settle(e, s.value === '' ? null : s.value === 'void' ? 'void' : +s.value); });
   // equity
   const cv = $('#equity'); const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (!w) return;
   cv.width = w * dpr; cv.height = h * dpr; const c = cv.getContext('2d'); c.scale(dpr, dpr);
@@ -960,6 +1110,59 @@ function renderLedger() {
   c.beginPath(); pts.forEach((v, i) => i ? c.lineTo(X(i), Y(v)) : c.moveTo(X(0), Y(v))); c.strokeStyle = '#19e68c'; c.lineWidth = 2; c.stroke();
   if (open.length) { c.setLineDash([5, 5]); c.beginPath(); c.moveTo(X(n - 1), Y(pts[n - 1])); c.lineTo(X(n), Y(lockEnd)); c.strokeStyle = '#9b7bff'; c.stroke(); c.setLineDash([]); c.fillStyle = '#9b7bff'; c.fillText('+ locked open', X(n) - 80, Y(lockEnd) - 8); }
 }
+
+/* ============================ books view ============================ */
+function renderWallets() {
+  const keys = Object.keys(W.books).sort((a, b) => W.books[b].balance - W.books[a].balance), open = openByBook(), T = targets();
+  const total = sum(keys.map(k => W.books[k].balance)), openTot = sum(Object.values(open));
+  $('#w-total').textContent = money(total); $('#w-total-s').textContent = keys.length + ' books tracked';
+  $('#w-open').textContent = money(openTot); $('#w-open-s').textContent = 'bankroll incl. open: ' + money(total + openTot, 0);
+  const top2 = keys.map(k => W.books[k].balance).filter(b => b > 0).slice(0, 2);
+  $('#w-max').textContent = top2.length === 2 ? money(2 * Math.min(...top2), 0) : '—';
+  $('#w-off').textContent = money(sum(keys.map(k => Math.max(0, W.books[k].balance - T[k]))), 0);
+  $('#walletBody').innerHTML = keys.map(k => { const b = W.books[k]; return `<tr style="cursor:default"><td><b>${esc(b.title)}</b><div class="wb">${esc(k)}${W.tally[k] ? ` · best price in ${W.tally[k].n} arbs` : ''}</div></td>
+      <td class="mono ${b.balance < 0 ? 'neg' : ''}" style="font-size:15px;font-weight:700">${money(b.balance)}</td><td class="mono amb">${open[k] ? money(open[k]) : '<span class="muted">—</span>'}</td>
+      <td class="mono muted">${money(T[k], 0)}</td>
+      <td><div class="row" style="flex-wrap:nowrap"><input class="wamt" type="number" min="0" step="10" placeholder="amount" data-amt="${esc(k)}"><button class="btn sm" data-dep="${esc(k)}">Deposit</button><button class="btn sm" data-wd="${esc(k)}">Withdraw</button><button class="btn sm" data-set="${esc(k)}" title="Set the exact balance your book shows">Set</button></div></td>
+      <td><button class="btn sm" data-del="${esc(k)}" title="Stop tracking">✕</button></td></tr>`; }).join('')
+    || '<tr><td colspan="6"><div class="empty"><div class="big">$</div>No books yet. Add the sportsbooks you have accounts at and enter what\'s in each one.</div></td></tr>';
+  const amt = k => +$(`[data-amt="${CSS.escape(k)}"]`).value;
+  $$('[data-dep]').forEach(b => b.onclick = () => { const a = amt(b.dataset.dep); if (a > 0) { wMove(b.dataset.dep, a, 'Deposit'); saveW(); renderWallets(); } });
+  $$('[data-wd]').forEach(b => b.onclick = () => { const a = amt(b.dataset.wd); if (a > 0) { wMove(b.dataset.wd, -a, 'Withdrawal'); saveW(); renderWallets(); } });
+  $$('[data-set]').forEach(b => b.onclick = () => { const v = $(`[data-amt="${CSS.escape(b.dataset.set)}"]`).value; if (v === '') return; wMove(b.dataset.set, +v - W.books[b.dataset.set].balance, 'Balance corrected'); saveW(); renderWallets(); });
+  $$('[data-del]').forEach(b => b.onclick = () => { if (confirm(`Stop tracking ${W.books[b.dataset.del].title}?`)) { delete W.books[b.dataset.del]; saveW(); renderWallets(); } });
+  // add-book picker: books seen in the feed or ranked by edge, minus tracked ones
+  const known = { ...Object.fromEntries(Object.entries(W.tally).map(([k, v]) => [k, v.title])), ...BOOKTITLE };
+  $('#addBookSel').innerHTML = '<option value="">choose…</option>' + Object.entries(known).filter(([k]) => !W.books[k]).sort((a, b) => a[1].localeCompare(b[1])).map(([k, t]) => `<option value="${esc(k)}">${esc(t)}</option>`).join('');
+  $('#targetMode').value = W.target;
+  // rebalance
+  const moves = rebalancePlan();
+  $('#rebalance').innerHTML = keys.length < 2 ? '<div class="muted">Track two or more books to get a rebalance plan.</div>'
+    : moves.length ? moves.map(m => `<div class="mv"><span>Withdraw <b class="neg">${money(m.amt, 0)}</b> from <b>${esc(W.books[m.from].title)}</b></span><span class="muted">→</span><span>deposit into <b class="pos">${esc(W.books[m.to].title)}</b></span></div>`).join('')
+      + '<div class="muted" style="font-size:11px;margin-top:6px">Books can\'t transfer to each other, so each move is a bank withdrawal then a deposit. Withdrawals can take a few days, so rebalance before you need the money.</div>'
+    : '<div class="mv"><span class="pos">✓ Balanced.</span><span class="muted">Every book is within tolerance of its target.</span></div>';
+  const mx = Math.max(1, ...keys.map(k => Math.max(W.books[k].balance, T[k])));
+  $('#alloc').innerHTML = keys.map(k => `<div class="al"><span class="n">${esc(W.books[k].title)}</span><span class="bar"><i style="width:${clamp(W.books[k].balance / mx, 0, 1) * 100}%"></i><u style="left:${T[k] / mx * 100}%" title="target"></u></span><span class="mono muted" style="text-align:right">${pct(total > 0 ? Math.max(0, W.books[k].balance) / total : 0, 0)}</span></div>`).join('')
+    + (keys.length ? '<div class="muted" style="font-size:11px">Bar = balance · white tick = target</div>' : '');
+  $('#wlog').innerHTML = W.log.slice(0, 60).map(x => `<div style="display:grid;grid-template-columns:104px 1fr auto;gap:8px;padding:4px 0;white-space:nowrap;border-bottom:1px dashed var(--line)"><span class="muted">${new Date(x.t).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.title)} · ${esc(x.note)}</span><span class="${x.amt >= 0 ? 'pos' : 'neg'}">${x.amt >= 0 ? '+' : ''}${money(x.amt)}</span></div>`).join('') || '<div class="muted">No activity yet.</div>';
+}
+function addBook(key, title, amt) {
+  if (!key || W.books[key]) return;
+  W.books[key] = { title, balance: 0 }; if (amt > 0) wMove(key, amt, 'Opening balance');
+  W.log.unshift({ t: Date.now(), key, title, amt: 0, note: 'Started tracking', bal: W.books[key].balance });
+}
+$('#addBookBtn').onclick = () => {
+  const name = $('#addBookName').value.trim(), sel = $('#addBookSel').value, amt = +$('#addBookAmt').value || 0;
+  const key = name ? name.toLowerCase().replace(/[^a-z0-9]+/g, '_') : sel; if (!key) return toast('Pick a book or type a name', true);
+  if (W.books[key]) return toast('Already tracked', true);
+  addBook(key, name || $('#addBookSel').selectedOptions[0].text, amt); $('#addBookName').value = ''; $('#addBookAmt').value = 0; saveW(); renderWallets();
+};
+$('#addTopBtn').onclick = () => {
+  const ranked = Object.entries(W.tally).filter(([k]) => !W.books[k]).sort((a, b) => b[1].n - a[1].n).slice(0, 5);
+  if (!ranked.length) return toast('Let the scanner run a bit first. It ranks books by how often they post the best price.', true);
+  ranked.forEach(([k, v]) => addBook(k, v.title, 0)); saveW(); renderWallets(); toast(`Added ${ranked.map(r => esc(r[1].title)).join(', ')}. Enter their balances.`);
+};
+$('#targetMode').onchange = e => { W.target = e.target.value; store.set('arbx.target', W.target); renderWallets(); };
 
 /* ============================ calculator ============================ */
 let calcLegs = [{ label: 'Team A', odds: '+155', comm: '' }, { label: 'Team B', odds: '-140', comm: '' }];
@@ -1033,7 +1236,7 @@ function restart() {
   else { if (!S.apiKey) { setStatus('LIVE · no API key', false); toast('Add your The Odds API key in Settings, then press Save.', true); showView('settings'); return; } state.timer = setInterval(scan, S.refreshSec * 1000); scan(); }
 }
 function resetData() { state.track.clear(); state.prevPrices.clear(); state.tape = []; state.flow = []; state.scans = 0; state.selId = null; state.selOpp = null; $('#detail').dataset.id = ''; $('#detail').innerHTML = '<div class="empty"><div class="big">◎</div>Select an opportunity to open the stake optimizer.</div>'; }
-function showView(v) { state.view = v; $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); $$('.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + v)); if (v === 'ledger') renderLedger(); if (v === 'settings') renderSettings(); if (v === 'scanner') drawFlow(); }
+function showView(v) { state.view = v; $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); $$('.view').forEach(s => s.classList.toggle('on', s.id === 'v-' + v)); if (v === 'ledger') renderLedger(); if (v === 'books') renderWallets(); if (v === 'settings') renderSettings(); if (v === 'scanner') renderScanner(); }
 
 $('#tabs').onclick = e => { const b = e.target.closest('button'); if (b) showView(b.dataset.v); };
 $('#modeSeg').onclick = e => { const b = e.target.closest('button'); if (!b || b.dataset.m === S.mode) return; S.mode = b.dataset.m; saveS(); resetData(); if (S.mode === 'demo') Demo.init(); restart(); };
@@ -1042,7 +1245,7 @@ $('#bankroll').oninput = e => { S.bankroll = Math.max(1, +e.target.value || 1000
 $('#pauseBtn').onclick = () => { state.paused = !state.paused; $('#pauseBtn').textContent = state.paused ? 'Resume' : 'Pause'; restart(); };
 $('#scanBtn').onclick = () => { if (audioCtx == null && S.sound) try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch {} scan(); };
 $('#subtabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; state.tab = b.dataset.t; $$('#subtabs button').forEach(x => x.classList.toggle('on', x === b)); renderScanner(); };
-['#minRoi', '#q', '#sportF'].forEach(s => $(s).addEventListener('input', renderScanner));
+['#minRoi', '#q', '#sportF', '#fundedOnly'].forEach(s => $(s).addEventListener('input', renderScanner));
 function select(id) { state.selId = id; state.selOpp = findOpp(id); $('#detail').dataset.id = ''; renderScanner(); if (innerWidth < 980) $('#detail').scrollIntoView({ behavior: 'smooth' }); }
 $('#tbody').onclick = e => { const tr = e.target.closest('tr[data-id]'); if (tr) select(tr.dataset.id); };
 $('#heat').onclick = e => { const d = e.target.closest('[data-id]'); if (!d) return; const id = d.dataset.id; if (state.res.arbs.some(a => a.id === id)) { state.tab = 'arb'; $$('#subtabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'arb')); select(id); } else { const ev = state.res.evs.find(x => x.id.startsWith(id + '|')); if (ev) { state.tab = 'ev'; $$('#subtabs button').forEach(x => x.classList.toggle('on', x.dataset.t === 'ev')); select(ev.id); } else toast(esc(d.title)); } };
@@ -1056,7 +1259,7 @@ $('#csvBtn').onclick = () => {
   const blob = new Blob([rows.map(r => r.map(x => `"${String(x).replace(/"/g, '""')}"`).join(',')).join('\n')], { type: 'text/csv' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'arbx-ledger.csv'; a.click(); URL.revokeObjectURL(a.href);
 };
-$('#clrBtn').onclick = () => { if (confirm('Clear every logged bet?')) { state.ledger = []; store.set('arbx.ledger', []); renderLedger(); } };
+$('#clrBtn').onclick = () => { if (confirm('Clear every logged bet? Book balances stay as they are.')) { state.ledger = []; store.set('arbx.ledger', []); renderLedger(); } };
 setInterval(() => { const now = Date.now(); $$('.age[data-first]').forEach(el => el.textContent = ago(now - +el.dataset.first)); }, 1000);
 addEventListener('resize', () => { drawFlow(); if (state.view === 'ledger') renderLedger(); });
 document.addEventListener('keydown', e => { if (e.target.matches('input,select,textarea')) return; if (e.key === ' ') { e.preventDefault(); $('#pauseBtn').click(); } if (e.key === 'r') scan(); if (['1', '2', '3'].includes(e.key)) $$('#subtabs button')[+e.key - 1].click(); });
