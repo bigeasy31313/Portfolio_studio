@@ -201,6 +201,19 @@ canvas#equity{width:100%;height:220px;display:block}
 .al .bar i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--green2),var(--green));border-radius:3px}
 .al .bar u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text)}
 .al .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recs{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.rec{position:relative;display:flex;flex-direction:column;gap:6px;background:var(--bg2);border:1px solid var(--line);border-left:3px solid var(--k,var(--cyan));border-radius:12px;padding:11px 12px 11px 13px}
+.rec .top2{display:flex;align-items:center;gap:8px}
+.rec .kind{font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--k,var(--cyan));padding:2px 6px;border-radius:5px;background:color-mix(in srgb,var(--k,var(--cyan)) 12%,transparent)}
+.rec .rank{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim)}
+.rec .ti{font-weight:700;font-size:14px;line-height:1.3}
+.rec .why{font-size:12px;color:var(--muted);line-height:1.45}
+.rec .why b{color:var(--text);font-family:var(--mono);font-weight:600}
+.rec .acts{display:flex;gap:6px;margin-top:2px}
+.rec .x{position:absolute;top:6px;right:8px;background:none;border:0;color:var(--dim);cursor:pointer;font-size:14px;display:none}
+.rec:hover .x{display:block} .rec:hover .rank{visibility:hidden}
+.rec.act{--k:var(--green)} .rec.fund{--k:var(--amber)} .rec.risk{--k:var(--red)} .rec.value{--k:var(--violet)} .rec.setup{--k:var(--cyan)}
+.rec.act.hotrec{box-shadow:0 0 22px -10px var(--green)}
 #toast{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:100}
 #toast div{background:var(--panel2);border:1px solid var(--green);border-radius:10px;padding:10px 14px;font-size:13px;box-shadow:0 10px 30px -10px rgba(25,230,140,.5);animation:slide .3s;max-width:340px}
 #toast div.err{border-color:var(--red);box-shadow:0 10px 30px -10px rgba(255,77,109,.5)}
@@ -249,6 +262,11 @@ canvas#equity{width:100%;height:220px;display:block}
     <div class="kpi"><div class="l">Markets</div><div class="v" id="k-mk">0</div><div class="s" id="k-mk-s">0 books</div></div>
     <div class="kpi"><div class="l">Avg arb life</div><div class="v" id="k-life">—</div><div class="s" id="k-life-s">0 closed</div></div>
     <div class="kpi flow"><div class="l">Arb flow · live count per scan</div><canvas id="flow"></canvas></div>
+  </div>
+
+  <div class="panel" id="recPanel" style="margin-bottom:14px">
+    <h3>Recommended moves <span class="row"><span class="mono muted" id="recN" style="letter-spacing:0"></span><button class="btn sm" id="recReset" style="display:none">Show dismissed</button></span></h3>
+    <div class="recs" id="recs"></div>
   </div>
 
   <div class="grid">
@@ -774,7 +792,7 @@ function ingest(events) {
     const score = o.type === 'arb' ? o.roi : o.type === 'mid' ? o.evp : o.edge;
     if (!t) {
       t = { first: now, hist: [], peak: score, fresh: true }; state.track.set(o.id, t);
-      if (o.type === 'arb') { o.legs.forEach(l => { const x = W.tally[l.book] ||= { title: l.title, n: 0 }; x.n++; }); if (o.roi * 100 >= S.alertRoi && state.scans > 1) alerts.push(o); }
+      if (o.type === 'arb') { o.legs.forEach(l => { const x = W.tally[l.book] ||= { title: l.title, n: 0 }; x.n++; }); noteMissed(o, now); if (o.roi * 100 >= S.alertRoi && state.scans > 1) alerts.push(o); }
     }
     else t.fresh = false;
     t.hist.push(score); if (t.hist.length > 40) t.hist.shift(); t.peak = Math.max(t.peak, score); t.last = o;
@@ -915,6 +933,107 @@ function optimizeRound(st, L, r) {
   return best;
 }
 
+/* ============================ recommendations ============================ */
+// profit you couldn't take because a book was empty or untracked, blamed on the short book(s); last 24h
+const missed = store.get('arbx.missed', []);
+function noteMissed(o, now) {
+  if (!walletOn()) return;
+  const inv = o.legs.map(l => 1 / l.eff), s = sum(inv), T = Math.min(S.bankroll, fundable(o.legs)), lost = o.roi * (S.bankroll - T);
+  if (lost < .5) return;
+  const short = o.legs.filter((l, i) => !(bal(l.book) >= S.bankroll * inv[i] / s));
+  short.forEach(l => missed.push({ t: now, key: l.book, title: l.title, amt: lost / short.length }));
+  while (missed.length && missed[0].t < now - 864e5) missed.shift();
+  if (missed.length > 2000) missed.splice(0, missed.length - 2000);
+  store.set('arbx.missed', missed);
+}
+const dismissed = new Set();
+function buildRecs() {
+  const R = [], now = Date.now(), res = state.res, avgLife = state.grave.length ? sum(state.grave.slice(0, 50).map(g => g.life)) / Math.min(50, state.grave.length) : null;
+  const add = (r) => { if (!dismissed.has(r.id)) R.push(r); };
+  // 1. take the best arb you can actually fund
+  const arbs = res.arbs.map(a => ({ a, T: Math.min(S.bankroll, fundable(a.legs)) })).filter(x => x.T >= 10).map(x => ({ ...x, p: x.a.roi * x.T })).sort((x, y) => y.p - x.p);
+  arbs.slice(0, 2).forEach(({ a, T, p }, i) => {
+    const t = state.track.get(a.id), age = t ? now - t.first : 0;
+    const urgent = avgLife && age > avgLife * .6;
+    add({ id: 'arb|' + a.id, kind: 'act', pri: 100 + p * 4 - i, hot: i === 0,
+      title: `Lock ${money(p)} on ${a.ev.away_team.split(' ').pop()} @ ${a.ev.home_team.split(' ').pop()}`,
+      why: `${esc(a.market)}: ${a.legs.map(l => `<b>${esc(l.title)}</b> ${esc(l.label)} ${fmtOdds(l.price)}`).join(' + ')}. <b>${pct(a.roi)}</b> guaranteed on ${money(T, 0)}.`
+        + (urgent ? ` <span class="amb">Open ${ago(age)}; arbs here last ${ago(avgLife)} on average, so move now.</span>` : ` Place the ${esc(a.legs.slice().sort((x, y) => (x.book === 'pinnacle' || x.book.startsWith('betfair')) - (y.book === 'pinnacle' || y.book.startsWith('betfair')))[0].title)} leg first; soft books move and limit fastest.`),
+      acts: [['Open optimizer', () => { setTab('arb'); select(a.id); }]] });
+  });
+  // 2. fund the book that is costing you money
+  const recent = missed.filter(m => m.t > now - 864e5), byBook = {};
+  recent.forEach(m => { const x = byBook[m.key] ||= { title: m.title, amt: 0, n: 0 }; x.amt += m.amt; x.n++; });
+  Object.entries(byBook).sort((a, b) => b[1].amt - a[1].amt).slice(0, 2).forEach(([k, x]) => {
+    if (x.amt < 2) return;
+    const tracked = !!W.books[k], need = Math.max(S.bankroll * .6, (targets()[k] || 0)) - (bal(k) || 0);
+    add({ id: 'fund|' + k, kind: 'fund', pri: 80 + Math.min(x.amt, 15),
+      title: tracked ? `Top up ${x.title}` : `Open or track a ${x.title} account`,
+      why: `You missed <b>${money(x.amt)}</b> of locked profit across <b>${x.n}</b> arbs in the last 24h because ${esc(x.title)} was ${tracked ? 'short' : 'not in your Books'}.${tracked && need > 0 ? ` Deposit about <b>${money(Math.ceil(need / 50) * 50, 0)}</b>.` : ''}`,
+      acts: [['Go to Books', () => showView('books')]] });
+  });
+  // 3. low balances and rebalancing
+  if (walletOn()) {
+    const T = targets();
+    Object.entries(W.books).filter(([k, b]) => !R.some(r => r.id === 'fund|' + k) && b.balance < Math.min(T[k] * .35, S.bankroll * .5)).slice(0, 2).forEach(([k, b]) => add({ id: 'low|' + k, kind: 'fund', pri: 60 + (W.tally[k]?.n || 0),
+      title: `${b.title} is running low`, why: `<b>${money(b.balance)}</b> left against a target of <b>${money(T[k], 0)}</b>. Arbs that need this book will be capped or skipped.`, acts: [['Go to Books', () => showView('books')]] }));
+    const mv = rebalancePlan()[0];
+    if (mv) add({ id: 'reb|' + mv.from + mv.to, kind: 'fund', pri: 45 + mv.amt / 50, title: `Rebalance ${money(mv.amt, 0)}`,
+      why: `Withdraw from <b>${esc(W.books[mv.from].title)}</b>, deposit into <b>${esc(W.books[mv.to].title)}</b>. Withdrawals take days, so start before you need it.`, acts: [['See plan', () => showView('books')]] });
+  }
+  // 4. bets waiting to be settled
+  const due = state.ledger.filter(e => e.result == null && e.start && now - new Date(e.start) > 4 * 36e5);
+  if (due.length) add({ id: 'settle|' + due.length, kind: 'risk', pri: 70 + due.length * 3, title: `Settle ${due.length} finished bet${due.length > 1 ? 's' : ''}`,
+    why: `${esc(due[0].event)}${due.length > 1 ? ` and ${due.length - 1} more` : ''} should be over. <b>${money(sum(due.map(e => e.total)))}</b> is still counted as tied up. Settling pays winnings back into your book balances.`, acts: [['Open ledger', () => showView('ledger')]] });
+  // 5. value plays
+  const ev = res.evs.find(e => e.edge >= .03 && (!walletOn() || bal(e.leg.book) > 0));
+  if (ev) { const k = Math.max(0, ev.kelly / 4) * S.bankroll;
+    add({ id: 'ev|' + ev.id, kind: 'value', pri: 40 + ev.edge * 400, title: `Value: ${ev.leg.label} ${fmtOdds(ev.leg.price)}`,
+      why: `<b>${esc(ev.leg.title)}</b> pays ${fmtOdds(ev.leg.price)} against a fair ${fmtOdds(ev.fair)}, an edge of <b>+${pct(ev.edge, 1)}</b>. The ¼ Kelly stake is <b>${money(k, 0)}</b>. This isn't risk-free; the edge pays off over many bets.`,
+      acts: [['Details', () => { setTab('ev'); select(ev.id); }]] }); }
+  const mid = res.mids.find(m => m.evp > .01 && m.single > -.03);
+  if (mid) add({ id: 'mid|' + mid.id, kind: 'value', pri: 35 + mid.evp * 300, title: `Middle: ${mid.market}`,
+    why: `${esc(mid.ev.away_team)} @ ${esc(mid.ev.home_team)}. Worst case <b>${pct(mid.single)}</b>; if it lands in the window, <b>+${pct(mid.both, 0)}</b> (about ${pct(mid.hit, 0)} chance).`,
+    acts: [['Details', () => { setTab('mid'); select(mid.id); }]] });
+  // 6. risk hygiene from your own history
+  const recentBets = state.ledger.filter(e => now - e.ts < 7 * 864e5), cnt = {};
+  recentBets.forEach(e => e.legs.forEach(l => cnt[l.book] = (cnt[l.book] || 0) + 1));
+  const legsN = sum(Object.values(cnt)), heavy = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0];
+  if (legsN >= 8 && heavy && heavy[1] / legsN > .4) add({ id: 'heavy|' + heavy[0], kind: 'risk', pri: 30, title: `Spread your action beyond ${heavy[0]}`,
+    why: `<b>${pct(heavy[1] / legsN, 0)}</b> of your legs this week went to one book. Books that only see you taking their stale lines limit you fastest. Mix in some normal bets or use other books.` });
+  const voids = state.ledger.filter(e => e.result === 'void').length;
+  if (voids >= 2) add({ id: 'voids|' + voids, kind: 'risk', pri: 28, title: `${voids} voided bets`,
+    why: 'Voids usually mean palpable-error cancellations or rules that differ between books. Check each book\'s void and overtime rules before the next arb in that sport.', acts: [['Open ledger', () => showView('ledger')]] });
+  // 7. setup
+  if (!walletOn()) add({ id: 'setup|books', kind: 'setup', pri: 55, title: 'Track your book balances',
+    why: 'Right now every arb assumes you have the full bankroll at every book. Add your accounts so ARBX shows only what you can fund, and which deposit would unlock the most profit.', acts: [['Add books', () => showView('books')]] });
+  if (S.rounding < 1) add({ id: 'setup|round', kind: 'setup', pri: 20, title: 'Round your stakes',
+    why: 'Stakes like $487.33 flag you as an arber. Rounding to $5 usually costs a few cents of ROI.', acts: [['Use $5', () => { S.rounding = 5; saveS(); toast('Stakes now round to $5'); }]] });
+  if (state.mode === 'demo') add({ id: 'setup|live', kind: 'setup', pri: 10, title: 'Demo data is simulated',
+    why: 'Add a The Odds API key (free tier: 500 credits/month) and switch to LIVE to scan real sportsbook prices.', acts: [['Settings', () => showView('settings')]] });
+  if (S.mode === 'live' && Live.remaining != null && +Live.remaining < 50) add({ id: 'setup|credits', kind: 'risk', pri: 65, title: `Only ${Live.remaining} API credits left`,
+    why: 'Raise the refresh interval or cut regions and markets in Settings so you don\'t run dry mid-session.', acts: [['Settings', () => showView('settings')]] });
+  return R.sort((a, b) => b.pri - a.pri);
+}
+function setTab(t) { state.tab = t; $$('#subtabs button').forEach(x => x.classList.toggle('on', x.dataset.t === t)); }
+let recActs = {}, recSig = '';
+function renderRecs() {
+  const all = buildRecs(), recs = all.slice(0, 6);
+  $('#recN').textContent = all.length > 6 ? `top 6 of ${all.length}` : '';
+  $('#recReset').style.display = dismissed.size ? '' : 'none';
+  recActs = {}; recs.forEach(r => (r.acts || []).forEach((a, i) => recActs[r.id + '#' + i] = a[1]));
+  const html = recs.map((r, n) => `<div class="rec ${r.kind} ${r.hot ? 'hotrec' : ''}"><div class="top2"><span class="kind">${{ act: 'take it', fund: 'bankroll', risk: 'attention', value: '+EV', setup: 'setup' }[r.kind]}</span><span class="rank">#${n + 1}</span></div>
+    <button class="x" data-dis="${esc(r.id)}" title="Dismiss">✕</button><div class="ti">${esc(r.title)}</div><div class="why">${r.why}</div>
+    ${r.acts ? `<div class="acts">${r.acts.map((a, i) => `<button class="btn sm ${i === 0 && r.kind === 'act' ? 'pri' : ''}" data-ra="${esc(r.id + '#' + i)}">${esc(a[0])}</button>`).join('')}</div>` : ''}</div>`).join('')
+    || '<div class="muted">Nothing needs you right now. The scanner is still watching.</div>';
+  if (html !== recSig) { $('#recs').innerHTML = html; recSig = html; }
+}
+$('#recs').onclick = e => {
+  const d = e.target.closest('[data-dis]'); if (d) { dismissed.add(d.dataset.dis); renderRecs(); return; }
+  const a = e.target.closest('[data-ra]'); if (a && recActs[a.dataset.ra]) recActs[a.dataset.ra]();
+};
+$('#recReset').onclick = () => { dismissed.clear(); renderRecs(); };
+
 /* ============================ scanner rendering ============================ */
 const spark = (h, color = '#19e68c') => {
   if (!h || h.length < 2) return '<svg width="64" height="18"></svg>';
@@ -968,12 +1087,12 @@ function renderScanner() {
     if (o.type === 'mid') return `<tr class="${cls}" data-id="${esc(o.id)}"><td><span class="roi" style="color:${o.evp > 0 ? 'var(--green)' : 'var(--amber)'}">${pct(o.evp)}</span></td><td>${evCell(o.ev)}</td><td class="mono" style="font-size:12px;white-space:nowrap">${esc(o.market)}<div class="muted">${o.width} pt${o.width === 1 ? '' : 's'} wide</div></td><td>${legChips(o.legs)}</td><td class="mono">${pct(o.hit, 1)}</td><td class="mono ${o.single >= 0 ? 'pos' : 'neg'}">${pct(o.single)}</td><td>${age}</td></tr>`;
     return `<tr class="${cls}" data-id="${esc(o.id)}"><td><span class="roi" style="color:var(--violet)">${pct(o.edge)}</span></td><td>${evCell(o.ev)}</td><td style="font-size:12px"><b>${esc(o.leg.label)}</b><div class="muted mono">${esc(o.market)}</div></td><td class="mono">${esc(o.leg.title)} <b>${fmtOdds(o.leg.price)}</b></td><td class="mono muted">${fmtOdds(o.fair)}</td><td class="mono pos">${money(Math.max(0, o.kelly / 4 * S.bankroll))}</td><td>${age}</td></tr>`;
   }).join('');
-  renderDetail(); renderHeat(); renderBooks(); renderTape(); renderGrave(); drawFlow();
+  renderRecs(); renderDetail(); renderHeat(); renderBooks(); renderTape(); renderGrave(); drawFlow();
 }
 
 function profitCell(o) {
   const F = fundable(o.legs), T = Math.min(S.bankroll, F);
-  if (T < 10) return `<span class="chip" style="color:var(--dim)">unfunded</span><div class="wb">${esc(o.legs.filter(l => !(bal(l.book) > 0)).map(l => l.title).join(', '))}</div>`;
+  if (T < 10) return `<span class="chip" style="color:var(--dim)">unfunded</span><div class="wb" style="margin-top:5px">${esc(o.legs.filter(l => !(bal(l.book) > 0)).map(l => l.title).join(', '))}</div>`;
   return `<span class="pos">+${money(o.roi * T)}</span>${T < S.bankroll ? `<div class="wb" style="color:var(--amber)">capped at ${money(T, 0)}</div>` : ''}`;
 }
 function findOpp(id) { const r = state.res; return r.arbs.find(o => o.id === id) || r.mids.find(o => o.id === id) || r.evs.find(o => o.id === id); }
@@ -1011,7 +1130,7 @@ function renderDetail() {
       <div><div class="l">Full Kelly</div><div class="v">${money(k * S.bankroll)}</div></div><div><div class="l">½ · ¼ Kelly</div><div class="v pos">${money(k / 2 * S.bankroll, 0)} · ${money(k / 4 * S.bankroll, 0)}</div></div></div>
       <div class="mono muted" style="font-size:11px">Fair line from ${esc(o.src)}. Expected profit at ¼ Kelly: <span class="pos">${money(k / 4 * S.bankroll * o.edge)}</span> per bet.</div>`;
   } else info.innerHTML = '';
-  if (detailPanel) detailPanel.setLegs(o.legs.map(l => ({ ...l })), { event: title, market: o.market, type: o.type, id: o.id });
+  if (detailPanel) detailPanel.setLegs(o.legs.map(l => ({ ...l })), { event: title, market: o.market, type: o.type, id: o.id, start: o.ev.commence_time });
   // price ladder
   const g = o.group; const lad = box.querySelector('.ladder');
   if (g) {
@@ -1062,7 +1181,7 @@ function drawFlow() {
 
 /* ============================ ledger ============================ */
 function logBet(meta, legs, c) {
-  state.ledger.unshift({ id: Date.now().toString(36), ts: Date.now(), event: meta?.event || 'Manual calc', market: meta?.market || '', legs: legs.map((l, i) => ({ key: W.books[l.book] ? l.book : null, book: l.title || l.book || 'Leg ' + (i + 1), label: l.label, price: l.price, eff: l.eff, stake: c.st[i] })), total: c.tot, locked: c.min, result: null });
+  state.ledger.unshift({ id: Date.now().toString(36), ts: Date.now(), start: meta?.start || null, event: meta?.event || 'Manual calc', market: meta?.market || '', legs: legs.map((l, i) => ({ key: W.books[l.book] ? l.book : null, book: l.title || l.book || 'Leg ' + (i + 1), label: l.label, price: l.price, eff: l.eff, stake: c.st[i] })), total: c.tot, locked: c.min, result: null });
   const e = state.ledger[0];
   if (e.legs.some(l => l.key)) {
     e.debited = true; e.credits = [];
